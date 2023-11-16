@@ -35,6 +35,10 @@ CLI options.
 ungit.sh -h
 ```
 
+This script has minimal dependencies. It has been tested under `bash` and `ash`
+and will be able to download content as long as `curl` (preferred) or `wget`
+(including the busybox version) are available at the `$PATH`.
+
 ## Why?
 
 There are a number of scenarios where this can be useful:
