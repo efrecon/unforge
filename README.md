@@ -6,6 +6,35 @@ will get a snapshot of the repository at that reference, with no history. In
 most cases, this is much quicker than cloning the reposotory. It does not work
 for private repositories.
 
+## Examples
+
+Provided `ungit.sh` is in your `$PATH`, the following command will download the
+latest content of this repository (`main` branch) into a directory called
+`ungit` under the current directory.
+
+```bash
+ungit.sh efrecon/ungit
+```
+
+The following command will download the first version of this repository to the
+directory `/tmp/ungit`.
+
+```bash
+ungit.sh efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
+```
+
+## Usage
+
+The behaviour of this script is controlled by a series of environment variables
+-- all starting by `UNGIT_` -- and by its command-line (short) options. Options
+have precedence over the environment variables. Provided `ungit.sh` is in your
+`$PATH`, run the following command to get help over both the variables and the
+CLI options.
+
+```bash
+ungit.sh -h
+```
+
 ## Why?
 
 There are a number of scenarios where this can be useful:
