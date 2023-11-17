@@ -27,9 +27,9 @@ usage() {
     USAGE="Extract/maintain snapshots of git(hub/lab) repositories"
   fi
   printf "%s: %s\\n" "$(basename "$0")" "$USAGE" && \
-    grep "[[:space:]]\-.*)\ #" "$0" |
+    grep -E '^\s+[[:alnum:]])\s+#' "$0" |
     sed 's/#//' |
-    sed 's/)/\t/'
+    sed -E 's/([[:alnum:]])\)/-\1\t/'
   printf \\nEnvironment:\\n
   set | grep '^UNGIT_' | sed 's/^UNGIT_/    UNGIT_/g'
   exit "${1:-0}"
