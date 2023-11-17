@@ -19,6 +19,14 @@ UNGIT_DEFAULT_REF=${UNGIT_DEFAULT_REF:-main}
 # Force overwriting of existing files and directories.
 UNGIT_FORCE=${UNGIT_FORCE:-0}
 
+# Keep the content of the target directory as is before extracting. Usually,
+# this is just a bad idea. So it exists as a variable-driven option only.
+UNGIT_KEEP=${UNGIT_KEEP:-0}
+
+# Protect target directory and files from being changed by making them
+# read-only.
+UNGIT_PROTECT=${UNGIT_PROTECT:-0}
+
 # Print usage out of content of main script and exit.
 usage() {
   # This uses the comments behind the options to show the help. Not extremly
@@ -36,10 +44,12 @@ usage() {
 }
 
 
-while getopts "fr:t:vh-" opt; do
+while getopts "fpr:t:vh-" opt; do
   case "$opt" in
     f) # Force overwriting of existing files and directories
       UNGIT_FORCE=1;;
+    p) # Protect target directory and files from being changed by making them read-only
+      UNGIT_PROTECT=1;;
     r) # Set the default reference, main by default
       UNGIT_DEFAULT_REF=$OPTARG;;
     t) # Force the repository type (github or gitlab), empty to autodetect from URL. Defaults to github
@@ -182,9 +192,22 @@ mkdir -p "$tardir"
 tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" -C "$tardir"
 
 # Create the destination directory and copy the contents of the tarball to it.
+if [ -d "$DESTDIR" ]; then
+  if [ "$UNGIT_PROTECT" -eq 1 ]; then
+    chmod -R u-w "$DESTDIR"
+  fi
+  if [ "$UNGIT_KEEP" -eq 1 ]; then
+    verbose "Extracting $UNGIT_TYPE snapshot to ${DESTDIR}, directory content will be entirely replaced."
+  else
+    verbose "Extracting $UNGIT_TYPE snapshot to ${DESTDIR}, current directory content kept."
+    rm -rf "$DESTDIR"
+  fi
+fi
 mkdir -p "${DESTDIR}"
-verbose "Extracting GitHub snapshot to ${DESTDIR}"
 tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
+if [ "$UNGIT_PROTECT" -eq 1 ]; then
+  chmod -R a-w "$DESTDIR"
+fi
 
 # Cleanup.
 rm -rf "$dwdir" "$tardir"

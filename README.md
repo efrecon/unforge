@@ -1,10 +1,14 @@
 # ungit
 
 Fetch the content of a forge's repository at a given reference into a local
-directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus entirely
-bypasses `git`. You will get a snapshot of the repository at that reference,
-with no history. In most cases, this is much quicker than cloning the
+directory. By default, the content of the target directory will be wiped before
+copying the snapshot. [`ungit`](./ungit.sh) uses the various forge APIs, thus
+entirely bypasses `git`. You will get a snapshot of the repository at that
+reference, with no history. In most cases, this is much quicker than cloning the
 repository. `ungit` does not work for private repositories.
+
+Read [here](#highlights) for a more detailed list of `ungit`'s features, or jump
+straight to the [examples](#examples).
 
 ## Examples
 
@@ -40,9 +44,9 @@ ungit.sh -t gitlab -v gitlab-org/gitlab-runner@renovate/golang-1.x
 
 ## Usage
 
-The behaviour of ungit is controlled by a series of environment variables -- all
-starting with `UNGIT_` -- and by its command-line (short) options. Options have
-precedence over the environment variables. Provided `ungit.sh` is in your
+The behaviour of `ungit` is controlled by a series of environment variables --
+all starting with `UNGIT_` -- and by its command-line (short) options. Options
+have precedence over the environment variables. Provided `ungit.sh` is in your
 `$PATH`, run the following command to get help over both the variables and the
 CLI options.
 
@@ -53,6 +57,20 @@ ungit.sh -h
 This script has minimal dependencies. It has been tested under `bash` and `ash`
 and will be able to download content as long as `curl` (preferred) or `wget`
 (including the busybox version) are available at the `$PATH`.
+
+## Highlights
+
++ Takes either the full URL to a repository, or its owner/tag as a first
+  parameter. In the second case, the URL is constructed out of the value of the
+  `-t` option -- `github` by default.
++ When APIs provide a way to make the difference, the search order for the
+  reference is branch name, tag name, commit reference.
++ Wipes the content of the target directory, unless the `UNGIT_KEEP` variable is
+  set to `1`. Since `ungit` is about obtaining snapshots of target repositories,
+  the default prevents mixing snapshots.
++ `-p` can prevent the target directory to be modified by forcing all files and
+  sub-directories to be read-only. This can prevent modification by
+  headlessness.
 
 ## Why?
 
@@ -69,9 +87,6 @@ There are a number of scenarios where this can be useful:
 
 ## Ideas
 
-+ Enforce read-only flags on all downloaded files. Good to make sure no changes
-  can be made to the files, meaning good when taking "in" a project as a
-  dependency.
 + Implement a github action on top.
 + Add a local cache (XDG aware) so as to keep tarballs and be able to revert
   from them. Add a "local" conduit in addition to the download_ functions to use
