@@ -39,6 +39,16 @@ UNGIT_PROTECT=${UNGIT_PROTECT:-0}
 # called ungit in the XDG cache directory.
 UNGIT_CACHE=${UNGIT_CACHE:-${XDG_CACHE_HOME}/ungit}
 
+# Path to a file containing an index of all the snapshots created and from
+# where. When empty, a file called .ungit will be created under the root of the
+# git repository holding the destination directory, or none. When a dash, no
+# index will be created.
+UNGIT_INDEX=${UNGIT_INDEX:-}
+
+# Number of directories to look up for the .git directory. Set to -1 for no
+# limit, and risk of infinite loop.
+UNGIT_RFIND=${UNGIT_RFIND:-25}
+
 # Print usage out of content of main script and exit.
 usage() {
   # This uses the comments behind the options to show the help. Not extremly
@@ -56,12 +66,14 @@ usage() {
 }
 
 
-while getopts "c:fpr:t:vh-" opt; do
+while getopts "c:fi:pr:t:vh-" opt; do
   case "$opt" in
     c) # Set the cache directory. Defaults to $XDG_CACHE_HOME/ungit. Empty to disable cache.
       UNGIT_CACHE=$OPTARG;;
     f) # Force overwriting of existing files and directories. Twice to force redownload of tarball even if in cache.
       UNGIT_FORCE=$((UNGIT_FORCE+1));;
+    i) # Set the index file. Defaults to .ungit in the root of the git repository holding the destination directory.
+      UNGIT_INDEX=$OPTARG;;
     p) # Protect target directory and files from being changed by making them read-only
       UNGIT_PROTECT=1;;
     r) # Set the default reference, main by default
@@ -151,6 +163,48 @@ to_filename() {
   fi
 }
 
+# Climb up the directory tree, and look for the pattern
+climb_and_find() {
+  if [ "$#" -gt 1 ]; then
+    DIR=$2
+  else
+    DIR=$(pwd)
+  fi
+  RFIND_UP=$UNGIT_RFIND
+
+  while [ "$DIR" != '/' ]; do
+    verbose "Entering $DIR"
+    find "$DIR" -maxdepth 1 -name "$1" -print 2>/dev/null
+    DIR=$(dirname "$DIR")
+    if [ "$RFIND_UP" -gt 0 ]; then
+      RFIND_UP=$((RFIND_UP-1))
+      if [ "$RFIND_UP" -eq 0 ]; then
+        verbose "Reached max number of directories to look $1 in"
+        break
+      fi
+    fi
+  done
+}
+
+# Compute relative path from directory $1 to directory $2 (both directories need
+# to exist).
+relpath() {
+  s=$(cd "${1%%/}" && pwd)
+  d=$(cd "$2" && pwd)
+  b=
+  while [ "${d#"$s"/}" = "${d}" ]; do
+    s=$(dirname "$s")
+    b="../${b}"
+  done
+  printf %s\\n "${b}${d#"$s"/}"
+}
+
+# TODO: when no argument is passed, look for and read the index file and init.
+# Initialisation will:
+# - Create the target directory, by downloading the repo URL.
+
+# TODO: When in git mode, automatically turn protection on to prevent accidental changes of a dependent repo.
+
 # At least a repository name is required.
 if [ $# -eq 0 ]; then
   usage 1>&2
@@ -195,6 +249,22 @@ if [ -d "$DESTDIR" ] && [ "$UNGIT_FORCE" -eq 0 ]; then
   error "Destination directory $DESTDIR already exists. Use -f to overwrite."
 fi
 
+if [ -z "$UNGIT_INDEX" ]; then
+  # Lookup for a .git directory.
+  GITDIR=$(climb_and_find .git "$(dirname "$DESTDIR")" | head -n 1)
+  if [ -z "$GITDIR" ]; then
+    debug "Could not find a .git directory in $(dirname "$DESTDIR")"
+    GITROOT=""
+  else
+    GITROOT=$(dirname "$GITDIR")
+  fi
+
+  # Set index as being a file called .ungit in the root of the git repository
+  if [ -n "$GITROOT" ]; then
+    UNGIT_INDEX=${GITROOT}/.ungit
+  fi
+fi
+
 # Decide the repository type when none is specified, detect from the URL
 if [ -z "$UNGIT_TYPE" ]; then
   if printf %s\\n "$REPO_URL" | grep -q 'github\.com'; then
@@ -217,8 +287,8 @@ if [ -n "$UNGIT_CACHE" ]; then
   fi
 fi
 
-# Download the tarball to a temporary directory and extract it to another
-# temporary directory.
+# Copy (from cache) or download the tarball to a temporary directory and extract
+# it to another temporary directory.
 dwdir=$(mktemp -d)
 if cp_or_download "${dwdir}/${REPO_NAME}.tar.gz"; then
   debug "Written snapshot of ${REPO_URL}@${REPO_REF} to ${REPO_NAME}.tar.gz"
@@ -253,6 +323,15 @@ fi
 if [ -n "$UNGIT_CACHE" ]; then
   verbose "Caching snapshot source as $REPO_CACHE_PATH"
   mv -f "${dwdir}/${REPO_NAME}.tar.gz" "$REPO_CACHE_PATH"
+fi
+
+# Maintain an index of all the snapshots created and from where.
+if [ -n "$UNGIT_INDEX" ]; then
+  INDEX_DIR=$(dirname "$UNGIT_INDEX")
+  RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
+  # TODO: Remove any existing entry for the same directory.
+  # TODO: Inverse order of dir and URL?
+  printf '%s\t%s\n' "$REPO_URL" "$RELATIVE_DEST" >> "$UNGIT_INDEX"
 fi
 
 # Cleanup.
