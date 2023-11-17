@@ -251,8 +251,6 @@ fi
 
 # Keep a copy of the tarball in the cache directory if one is specified.
 if [ -n "$UNGIT_CACHE" ]; then
-  mkdir -p "$UNGIT_CACHE"
-  REPO_CACHE_PATH=${UNGIT_CACHE}/${UNGIT_TYPE}-$(to_filename "${REPO_NAME}")-$(to_filename "${REPO_REF}").tar.gz
   verbose "Caching snapshot source as $REPO_CACHE_PATH"
   mv -f "${dwdir}/${REPO_NAME}.tar.gz" "$REPO_CACHE_PATH"
 fi
