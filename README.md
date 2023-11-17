@@ -3,7 +3,7 @@
 Fetch the content of a forge's repository at a given reference into a local
 directory. This uses the various forge APIs, thus entirely bypasses git. You
 will get a snapshot of the repository at that reference, with no history. In
-most cases, this is much quicker than cloning the reposotory. It does not work
+most cases, this is much quicker than cloning the repository. It does not work
 for private repositories.
 
 ## Examples
@@ -26,10 +26,10 @@ ungit.sh efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
 ## Usage
 
 The behaviour of this script is controlled by a series of environment variables
--- all starting by `UNGIT_` -- and by its command-line (short) options. Options
-have precedence over the environment variables. Provided `ungit.sh` is in your
-`$PATH`, run the following command to get help over both the variables and the
-CLI options.
+-- all starting with `UNGIT_` -- and by its command-line (short) options.
+Options have precedence over the environment variables. Provided `ungit.sh` is
+in your `$PATH`, run the following command to get help over both the variables
+and the CLI options.
 
 ```bash
 ungit.sh -h
@@ -58,3 +58,11 @@ There are a number of scenarios where this can be useful:
   can be made to the files, meaning good when taking "in" a project as a
   dependency.
 + Implement a github action on top.
++ Add a local cache (XDG aware) so as to keep tarballs and be able to revert
+  from them. Add a "local" conduit in addition to the download_ functions to use
+  the local tarballs. Make sure cache files are unique (per forge, per repo, pre
+  ref).
++ Add a git mode. When inside a git directory, create a .ungit file with known
+  projects added at the root of the git tree. When run again, with a different
+  ref, the existing "installation" will be changed. Also add an upgrade mode to
+  bring installations in par, e.g. when pointing to main branch?
