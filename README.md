@@ -69,8 +69,8 @@ and will be able to download content as long as `curl` (preferred) or `wget`
   set to `1`. Since `ungit` is about obtaining snapshots of target repositories,
   the default prevents mixing snapshots.
 + `-p` can prevent the target directory to be modified by forcing all files and
-  sub-directories to be read-only. This can prevent modification by
-  headlessness.
+  sub-directories to be read-only. This can prevent headless modification of the
+  snapshots.
 
 ## Why?
 
