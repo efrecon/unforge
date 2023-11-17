@@ -4,6 +4,13 @@
 
 set -eu
 
+# XDG Base Directory Specification
+XDG_HOME=${XDG_HOME:-${HOME}};   # Not part of the specification, but useful
+XDG_DATA_HOME=${XDG_DATA_HOME:-${XDG_HOME%%*/}/.local/share}
+XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-${XDG_HOME%%*/}/.config}
+XDG_STATE_HOME=${XDG_STATE_HOME:-${XDG_HOME%%*/}/.local/state}
+XDG_CACHE_HOME=${XDG_CACHE_HOME:-${XDG_HOME%%*/}/.cache}
+
 # Level of verbosity, the higher the more verbose. All messages are sent to the
 # stderr.
 UNGIT_VERBOSE=${UNGIT_VERBOSE:-0}
@@ -16,7 +23,8 @@ UNGIT_TYPE=${UNGIT_TYPE:-}
 # Default reference to use when none is specified.
 UNGIT_DEFAULT_REF=${UNGIT_DEFAULT_REF:-main}
 
-# Force overwriting of existing files and directories.
+# When >=1 Force overwriting of existing files and directories, when >=2 force
+# redownload of tarball even if in cache.
 UNGIT_FORCE=${UNGIT_FORCE:-0}
 
 # Keep the content of the target directory as is before extracting. Usually,
@@ -26,6 +34,10 @@ UNGIT_KEEP=${UNGIT_KEEP:-0}
 # Protect target directory and files from being changed by making them
 # read-only.
 UNGIT_PROTECT=${UNGIT_PROTECT:-0}
+
+# Directory where to store the downloaded tarballs. Defaults to the directory
+# called ungit in the XDG cache directory.
+UNGIT_CACHE=${UNGIT_CACHE:-${XDG_CACHE_HOME}/ungit}
 
 # Print usage out of content of main script and exit.
 usage() {
@@ -44,10 +56,12 @@ usage() {
 }
 
 
-while getopts "fpr:t:vh-" opt; do
+while getopts "c:fpr:t:vh-" opt; do
   case "$opt" in
-    f) # Force overwriting of existing files and directories
-      UNGIT_FORCE=1;;
+    c) # Set the cache directory. Defaults to $XDG_CACHE_HOME/ungit. Empty to disable cache.
+      UNGIT_CACHE=$OPTARG;;
+    f) # Force overwriting of existing files and directories. Twice to force redownload of tarball even if in cache.
+      UNGIT_FORCE=$((UNGIT_FORCE+1));;
     p) # Protect target directory and files from being changed by making them read-only
       UNGIT_PROTECT=1;;
     r) # Set the default reference, main by default
@@ -119,6 +133,16 @@ download_gitlab_archive() {
   download_gz "${REPO_URL%/}/-/archive/${REPO_REF}/${REPO_NAME}-$(to_filename "${REPO_REF}").tar.gz" "${1:-}"
 }
 
+cp_or_download() {
+  if [ -n "${REPO_CACHE_PATH:-}" ] && [ -f "$REPO_CACHE_PATH" ]; then
+    verbose "Copying snapshot of $UNGIT_TYPE repository ${REPO_URL}@${REPO_REF} from $REPO_CACHE_PATH into $DESTDIR"
+    cp "$REPO_CACHE_PATH" "$1"
+  else
+    verbose "Downloading and extracting $UNGIT_TYPE repository at ${REPO_URL}@${REPO_REF} into $DESTDIR"
+    "download_${UNGIT_TYPE}_archive" "$1"
+  fi
+}
+
 to_filename() {
   if [ $# -eq 0 ]; then
     tr -C '[:alnum:].:_' '-'
@@ -139,8 +163,14 @@ else
   case "$UNGIT_TYPE" in
     gitlab)
       REPO_URL=https://gitlab.com/$1;;
+    github)
+      REPO_URL=https://github.com/$1
+      ;;
     *)
-      REPO_URL=https://github.com/$1;;
+      debug "Assuming github repository"
+      UNGIT_TYPE=github
+      REPO_URL=https://github.com/$1
+      ;;
   esac
 fi
 shift
@@ -175,13 +205,23 @@ if [ -z "$UNGIT_TYPE" ]; then
     error "Unsupported repository type: $REPO_URL"
   fi
 fi
-verbose "Downloading and extracting $UNGIT_TYPE repository at ${REPO_URL}@${REPO_REF} into $DESTDIR"
+
+# Decide upon the location of the tarball in the cache directory if one is
+# specified.
+if [ -n "$UNGIT_CACHE" ]; then
+  mkdir -p "$UNGIT_CACHE"
+  REPO_CACHE_PATH=${UNGIT_CACHE}/${UNGIT_TYPE}-$(to_filename "${REPO_NAME}")-$(to_filename "${REPO_REF}").tar.gz
+  if [ -f "$REPO_CACHE_PATH" ] && [ "$UNGIT_FORCE" -ge 2 ]; then
+    verbose "Removing cached snapshot $REPO_CACHE_PATH"
+    rm -f "$REPO_CACHE_PATH"
+  fi
+fi
 
 # Download the tarball to a temporary directory and extract it to another
 # temporary directory.
 dwdir=$(mktemp -d)
-if "download_${UNGIT_TYPE}_archive" "${dwdir}/${REPO_NAME}.tar.gz"; then
-  debug "Downloaded ${REPO_URL}@${REPO_REF} to ${REPO_NAME}.tar.gz"
+if cp_or_download "${dwdir}/${REPO_NAME}.tar.gz"; then
+  debug "Written snapshot of ${REPO_URL}@${REPO_REF} to ${REPO_NAME}.tar.gz"
 else
   rm -rf "$dwdir";  # Cleanup and exit
   error "Could not download ${REPO_URL}@${REPO_REF} to ${REPO_NAME}.tar.gz"
@@ -207,6 +247,14 @@ mkdir -p "${DESTDIR}"
 tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
 if [ "$UNGIT_PROTECT" -eq 1 ]; then
   chmod -R a-w "$DESTDIR"
+fi
+
+# Keep a copy of the tarball in the cache directory if one is specified.
+if [ -n "$UNGIT_CACHE" ]; then
+  mkdir -p "$UNGIT_CACHE"
+  REPO_CACHE_PATH=${UNGIT_CACHE}/${UNGIT_TYPE}-$(to_filename "${REPO_NAME}")-$(to_filename "${REPO_REF}").tar.gz
+  verbose "Caching snapshot source as $REPO_CACHE_PATH"
+  mv -f "${dwdir}/${REPO_NAME}.tar.gz" "$REPO_CACHE_PATH"
 fi
 
 # Cleanup.
