@@ -8,6 +8,8 @@ repository. `ungit` does not work for private repositories.
 
 ## Examples
 
+### Fetch from `main` branch at GitHub
+
 Provided `ungit.sh` is in your `$PATH`, the following command will download the
 latest content of this repository (`main` branch) into a directory called
 `ungit` under the current directory.
@@ -16,12 +18,24 @@ latest content of this repository (`main` branch) into a directory called
 ungit.sh efrecon/ungit
 ```
 
+### Specify a branch/tag/reference
+
 The following command will download the first version of this repository to the
 directory `/tmp/ungit`. The reference can either be a branch name, a tag or, as
 in the example, a commit reference.
 
 ```bash
 ungit.sh efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
+```
+
+### Download from GitLab
+
+The following command will download the `renovate/golang-1.x` branch from the
+GitLab Runner project. Verbosity feedback is provided, increase the number of
+`v`s for even more details.
+
+```bash
+ungit.sh -t gitlab -v gitlab-org/gitlab-runner@renovate/golang-1.x
 ```
 
 ## Usage

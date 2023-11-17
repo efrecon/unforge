@@ -9,12 +9,9 @@ set -eu
 UNGIT_VERBOSE=${UNGIT_VERBOSE:-0}
 
 # UNGIT_TYPE can be set to either github or gitlab depending on the repository
-# type. The default is to detect from the URL.
+# type. The default is to detect from the URL and when not possible, defaults to
+# github.
 UNGIT_TYPE=${UNGIT_TYPE:-}
-
-# URL to the default forge when none is specified. This is used to construct the
-# full URL to the repository.
-UNGIT_DEFAULT_FORGE=${UNGIT_DEFAULT_FORGE:-https://github.com}
 
 # Default reference to use when none is specified.
 UNGIT_DEFAULT_REF=${UNGIT_DEFAULT_REF:-main}
@@ -39,15 +36,13 @@ usage() {
 }
 
 
-while getopts "fg:r:t:vh-" opt; do
+while getopts "fr:t:vh-" opt; do
   case "$opt" in
     f) # Force overwriting of existing files and directories
       UNGIT_FORCE=1;;
-    g) # Set the URL to the default forge, https://github.com by default
-      UNGIT_DEFAULT_FORGE=$OPTARG;;
     r) # Set the default reference, main by default
       UNGIT_DEFAULT_REF=$OPTARG;;
-    t) # Force the repository type, leave empty to autodetect
+    t) # Force the repository type (github or gitlab), empty to autodetect from URL. Defaults to github
       UNGIT_TYPE=$OPTARG;;
     v) # Increase verbosity
       UNGIT_VERBOSE=$((UNGIT_VERBOSE+1));;
@@ -111,7 +106,15 @@ download_github_archive() {
 }
 
 download_gitlab_archive() {
-  download_gz "${REPO_URL%/}/-/archive/${REPO_REF}/${REPO_NAME}-${REPO_REF}.tar.gz" "${1:-}"
+  download_gz "${REPO_URL%/}/-/archive/${REPO_REF}/${REPO_NAME}-$(to_filename "${REPO_REF}").tar.gz" "${1:-}"
+}
+
+to_filename() {
+  if [ $# -eq 0 ]; then
+    tr -C '[:alnum:].:_' '-'
+  else
+    printf %s "$1" | to_filename
+  fi
 }
 
 # At least a repository name is required.
@@ -123,7 +126,12 @@ fi
 if printf %s\\n "$1" | grep -qE '^https?://'; then
   REPO_URL=$1
 else
-  REPO_URL=${UNGIT_DEFAULT_FORGE%/}/$1
+  case "$UNGIT_TYPE" in
+    gitlab)
+      REPO_URL=https://gitlab.com/$1;;
+    *)
+      REPO_URL=https://github.com/$1;;
+  esac
 fi
 shift
 
@@ -176,7 +184,7 @@ tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" -C "$tardir"
 # Create the destination directory and copy the contents of the tarball to it.
 mkdir -p "${DESTDIR}"
 verbose "Extracting GitHub snapshot to ${DESTDIR}"
-tar -C "${tardir}/${REPO_NAME}-${REPO_REF}" -cf - . | tar -C "${DESTDIR}" -xf -
+tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
 
 # Cleanup.
 rm -rf "$dwdir" "$tardir"
