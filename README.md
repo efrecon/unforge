@@ -17,7 +17,8 @@ ungit.sh efrecon/ungit
 ```
 
 The following command will download the first version of this repository to the
-directory `/tmp/ungit`.
+directory `/tmp/ungit`. The reference can either be a branch name, a tag or, as
+in the example, a commit reference.
 
 ```bash
 ungit.sh efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
@@ -25,11 +26,11 @@ ungit.sh efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
 
 ## Usage
 
-The behaviour of this script is controlled by a series of environment variables
--- all starting with `UNGIT_` -- and by its command-line (short) options.
-Options have precedence over the environment variables. Provided `ungit.sh` is
-in your `$PATH`, run the following command to get help over both the variables
-and the CLI options.
+The behaviour of ungit is controlled by a series of environment variables -- all
+starting with `UNGIT_` -- and by its command-line (short) options. Options have
+precedence over the environment variables. Provided `ungit.sh` is in your
+`$PATH`, run the following command to get help over both the variables and the
+CLI options.
 
 ```bash
 ungit.sh -h
