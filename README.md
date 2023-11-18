@@ -11,8 +11,8 @@ In that case it will maintain an index of such snapshots in a file called
 `.ungit` at the root of the repository. `ungit` automatically caches tarballs in
 the [XDG] cache to avoid unecessary downloads.
 
-Read further down a more detailed list of `ungit`'s [features](#highlights) and
-[limitations](#limitations), or jump straight to the [examples](#examples).
+Read further down for a more detailed list of `ungit`'s [features](#highlights)
+and [limitations](#limitations), or jump straight to the [examples](#examples).
 
 ## Examples
 
