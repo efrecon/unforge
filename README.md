@@ -1,57 +1,132 @@
 # ungit
 
 Fetch the content of a forge's repository at a given reference into a local
-directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus
-entirely bypasses `git`. You will get a snapshot of the repository at that
-reference, with no history. In most cases, this is much quicker than cloning the
+directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus entirely
+bypasses `git`. You will get a snapshot of the repository at that reference,
+with no history. In most cases, this is much quicker than cloning the
 repository.
+
+`ungit` can detect that the destination directory belongs to a git repository.
+In that case it will maintain an index of such snapshots in a file called
+`.ungit` at the root of the repository. `ungit` automatically caches tarballs in
+the [XDG] cache to avoid unecessary downloads.
 
 Read further down a more detailed list of `ungit`'s [features](#highlights) and
 [limitations](#limitations), or jump straight to the [examples](#examples).
 
 ## Examples
 
-### Fetch from `main` branch at GitHub
+### Basic Usage
+
+#### Fetch from `main` branch at GitHub
 
 Provided `ungit.sh` is in your `$PATH`, the following command will download the
 latest content of this repository (`main` branch) into a directory called
 `ungit` under the current directory.
 
 ```bash
+ungit.sh add efrecon/ungit
+```
+
+The `add` command is optional, this means that the command below is similar:
+
+```bash
 ungit.sh efrecon/ungit
 ```
 
-### Specify a branch/tag/reference
+#### Specify a branch/tag/reference
 
-The following command will download the first version of this repository to the
-directory `/tmp/ungit`. The reference can either be a branch name, a tag or, as
-in the example, a commit reference.
+The following command will download the first version ever committed to this
+repository to the directory `/tmp/ungit`. The reference can either be a branch
+name, a tag or, as in the example, a commit reference.
 
 ```bash
-ungit.sh efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
+ungit.sh add efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
 ```
 
-### Download from GitLab
+#### Download from GitLab
 
 The following command will download the `renovate/golang-1.x` branch from the
 GitLab Runner project. Verbosity feedback is provided, increase the number of
 `v`s for even more details.
 
 ```bash
-ungit.sh -t gitlab -v gitlab-org/gitlab-runner@renovate/golang-1.x
+ungit.sh -t gitlab -v add gitlab-org/gitlab-runner@renovate/golang-1.x
+```
+
+### Index File
+
+The examples below point explicitely to an index file called `.ungit`. If they
+were called from a directory contained in a git repository, it is possible to
+omit the `-i` option instead, as it is the default.
+
+#### Add a Snapshot
+
+The following command will download the latest content of this repository
+(`main` branch) into a directory called `ungit` under the current directory. It
+will update the index file called `.ungit` in the current directory to remember
+this association.
+
+```bash
+ungit.sh -i .ungit add efrecon/ungit
+```
+
+#### Install Several Snapshots
+
+Edit the `.ungit` file to the following content:
+
+```text
+ungit https://github.com/efrecon/ungit
+
+# Add (but rename) the gh-action-keepalive project
+actions/keepalive https://github.com/efrecon/gh-action-keepalive
+```
+
+Then, when the following command is run, it will add the `ungit` and
+`actions/keepalive` directories under the current directory. Since an index file
+is used, files and directories will be made read-only. This is to enforce
+managing the snapshots using `ungit`, and to prevent their heedless
+modification.
+
+```bash
+ungit.sh -i .ungit install
+```
+
+#### Remove a Snapshot
+
+Building upon the previous example, the following command will remove the
+`ungit` directory from under the current directory and remove the association
+from the index file.
+
+```bash
+ungit.sh -i .ungit remove ungit
 ```
 
 ## Usage
 
 The behaviour of `ungit` is controlled by a series of environment variables --
 all starting with `UNGIT_` -- and by its command-line (short) options. Options
-have precedence over the environment variables. Provided `ungit.sh` is in your
-`$PATH`, run the following command to get help over both the variables and the
-CLI options.
+have precedence over environment variables. The first argument to `ungit` is a
+command, and this command defaults to `add`. Provided `ungit.sh` is in your
+`$PATH`, run the following command to get help over both the variables, the CLI
+options and commands.
 
 ```bash
 ungit.sh -h
 ```
+
+`ungit` recognises the following commands as its first argument, after its
+options:
+
++ `add`: Add a snapshot of the repository passed as a first argument to the
+  directory passed as a second argument (optional). When an index file is to be
+  maintained, it will remember the association. The index file will contain a
+  relative reference to the destination directory.
++ `delete` (or `remove`): Remove the directory passed as an argument. When an
+  index file is to be maintained, the association will be lost.
++ `install`: Install snapshots of all repositories pointed out by the index
+  file, if not already present.
++ `help`: Print the same help as with the `-h` option and exit.
 
 This script has minimal dependencies. It has been tested under `bash` and `ash`
 and will be able to download content as long as `curl` (preferred) or `wget`
@@ -76,6 +151,11 @@ and will be able to download content as long as `curl` (preferred) or `wget`
 + `-p` can prevent the target directory to be modified by forcing all files and
   sub-directories to be read-only. This can prevent heedless modification of the
   snapshots.
++ Can maintain an index of (relative) directories containing snapshots of added
+  repositories. When using an index, target directory protection is
+  automatically turned on.
++ When run from within a `git` repository, will automatically use a file called
+  `.ungit` at the root of the repository as an index.
 
   [XDG]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
@@ -103,7 +183,3 @@ There are a number of scenarios where this can be useful:
 ## Ideas
 
 + Implement a github action on top.
-+ Add a git mode. When inside a git directory, create a .ungit file with known
-  projects added at the root of the git tree. When run again, with a different
-  ref, the existing "installation" will be changed. Also add an upgrade mode to
-  bring installations in par, e.g. when pointing to main branch?
