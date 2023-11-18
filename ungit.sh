@@ -32,7 +32,7 @@ UNGIT_FORCE=${UNGIT_FORCE:-0}
 UNGIT_KEEP=${UNGIT_KEEP:-0}
 
 # Protect target directory and files from being changed by making them
-# read-only. Boolean or auto for adapt to git mode
+# read-only. Boolean or auto (default) to turn on when index is used.
 UNGIT_PROTECT=${UNGIT_PROTECT:-"auto"}
 
 # Directory where to store the downloaded tarballs. Defaults to the directory
@@ -42,7 +42,7 @@ UNGIT_CACHE=${UNGIT_CACHE:-${XDG_CACHE_HOME}/ungit}
 # Path to a file containing an index of all the snapshots created and from
 # where. When empty, a file called .ungit will be created under the root of the
 # git repository holding the destination directory, or none. When a dash, no
-# index will be created.
+# index will be maintained, event in a git repository.
 UNGIT_INDEX=${UNGIT_INDEX:-}
 
 # Number of directories to look up for the .git directory. Set to -1 for no
@@ -60,6 +60,21 @@ usage() {
     grep -E '^\s+[[:alnum:]])\s+#' "$0" |
     sed 's/#//' |
     sed -E 's/([[:alnum:]])\)/-\1\t/'
+  cat <<EOF
+
+Usage:
+  $(basename "$0") [options] [command] [arguments]
+  where [options] are as above, [command] is one of:
+    install: Install all the snapshots listed in the index file
+    add:     Add a snapshot of a repository to the index
+    remove:  Remove a snapshot from the index
+    delete:  Remove a snapshot from the index
+    help:    Print this help and exit
+
+  When no known command is specified:
+  + if no argument is specified, install is assumed.
+  + if at least one argument is specified, add is assumed.
+EOF
   printf \\nEnvironment:\\n
   set | grep '^UNGIT_' | sed 's/^UNGIT_/    UNGIT_/g'
   exit "${1:-0}"
@@ -72,9 +87,9 @@ while getopts "c:fi:p:r:t:vh-" opt; do
       UNGIT_CACHE=$OPTARG;;
     f) # Force overwriting of existing files and directories. Twice to force redownload of tarball even if in cache.
       UNGIT_FORCE=$((UNGIT_FORCE+1));;
-    i) # Set the index file. Defaults to .ungit in the root of the git repository holding the destination directory.
+    i) # Set the index file. Defaults to .ungit in the root of the git repository holding the destination directory. Use a dash to disable default.
       UNGIT_INDEX=$OPTARG;;
-    p) # Protect target directory and files from being changed by making them read-only. Boolean or "auto" to turn on inside git repositories.
+    p) # Protect target directory and files from being changed by making them read-only. Boolean or "auto" (default) to turn on when index is used.
       UNGIT_PROTECT=$OPTARG;;
     r) # Set the default reference, main by default
       UNGIT_DEFAULT_REF=$OPTARG;;
@@ -82,7 +97,7 @@ while getopts "c:fi:p:r:t:vh-" opt; do
       UNGIT_TYPE=$OPTARG;;
     v) # Increase verbosity
       UNGIT_VERBOSE=$((UNGIT_VERBOSE+1));;
-    h)
+    h) # Print usage and exit
       usage;;
     -)
       break;;
@@ -108,6 +123,7 @@ verbose() { if [ "${UNGIT_VERBOSE:-0}" -ge "1" ]; then _log "$1" NFO; fi; }
 warning() { _log "$1" WRN; }
 error() { _log "$1" ERR && exit 1; }
 
+# User-friendly boolean functions. True is not false,,,
 is_false() { [ "$1" = "false" ] || { [ "$1" = "off" ] || [ "$1" = "0" ]; }; }
 is_true() { ! is_false "$1"; }
 
@@ -121,15 +137,18 @@ download() {
   elif command -v wget >/dev/null; then
     wget -q -O "${2:-$(basename "$1")}" "$1"
   else
-    error "You need curl or wget installed to download files!\n"
+    error "You need curl or wget installed to download files!"
   fi
 }
 
+# Call download as per the argument and verify that the downloaded file is a
+# gzip file. If not, remove it. Return an error unless there is a (downloaded)
+# gzip file.
 download_gz() {
   download "$@"
   if [ -f "${2:-$(basename "$1")}" ]; then
     if ! gzip -t "${2:-$(basename "$1")}" 1>/dev/null 2>&1; then
-      trace "Downloaded file ${2:-$(basename "$1")} is not a valid gzip file. Removing it."
+      trace "Downloaded file ${2:-$(basename "$1")} is not a valid gzip file. Removing it!"
       rm -f "${2:-$(basename "$1")}"
       return 1
     fi
@@ -138,26 +157,37 @@ download_gz() {
   fi
 }
 
+# Download the $REPO_URL at the $REPO_REF reference from GitHub. Consider the
+# reference to be a banch name first, then a tag name, then a commit hash.
 download_github_archive() {
+  # Note: does not perform any check on the validity of the reference. This
+  # could be done for commit references.
   download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
     download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
     download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
 }
 
+# Download the $REPO_URL at the $REPO_REF reference from GitLab. Rely on
+# GitLab's algorithm for resolving the reference to its real type: banch name,
+# tag name, or commit hash.
 download_gitlab_archive() {
   download_gz "${REPO_URL%/}/-/archive/${REPO_REF}/${REPO_NAME}-$(to_filename "${REPO_REF}").tar.gz" "${1:-}"
 }
 
+# If the repository reference at $REPO_REF from $REPO_URL is cached, copy it to
+# the destination directory at $1, otherwise download.
 cp_or_download() {
   if [ -n "${REPO_CACHE_PATH:-}" ] && [ -f "$REPO_CACHE_PATH" ]; then
-    verbose "Copying snapshot of $UNGIT_TYPE repository ${REPO_URL}@${REPO_REF} from $REPO_CACHE_PATH into $DESTDIR"
+    debug "Copying snapshot of $UNGIT_TYPE repository ${REPO_URL}@${REPO_REF} from $REPO_CACHE_PATH"
     cp "$REPO_CACHE_PATH" "$1"
   else
-    verbose "Downloading and extracting $UNGIT_TYPE repository at ${REPO_URL}@${REPO_REF} into $DESTDIR"
+    debug "Downloading and extracting $UNGIT_TYPE repository at ${REPO_URL}@${REPO_REF}"
     "download_${UNGIT_TYPE}_archive" "$1"
   fi
 }
 
+# Convert a git reference to something that can be used as a filename. Replaces
+# most non-alpha-numeric characters with a dash, as GitHub and GitLab do.
 to_filename() {
   if [ $# -eq 0 ]; then
     tr -C '[:alnum:].:_' '-'
@@ -166,7 +196,8 @@ to_filename() {
   fi
 }
 
-# Climb up the directory tree, and look for the pattern
+# Climb up the directory tree starting from $2 (or current dir), and look for
+# the pattern at $1
 climb_and_find() {
   if [ "$#" -gt 1 ]; then
     DIR=$2
@@ -176,7 +207,6 @@ climb_and_find() {
   RFIND_UP=$UNGIT_RFIND
 
   while [ "$DIR" != '/' ]; do
-    verbose "Entering $DIR"
     find "$DIR" -maxdepth 1 -name "$1" -print 2>/dev/null
     DIR=$(dirname "$DIR")
     if [ "$RFIND_UP" -gt 0 ]; then
@@ -204,7 +234,8 @@ relpath() {
 
 # Look up the hierarchy of $1 for a .git directory to be able to turn on "git
 # mode". Set the $GITROOT variable to the root location of the git repository
-# this is called from.
+# this is called from and adapt the UNGIT_INDEX if none was specified.
+# WARNING: This touches: GITROOT, UNGIT_INDEX, UNGIT_PROTECT->boolean
 git_detect() {
   GITDIR=$(climb_and_find .git "$1" | head -n 1)
   if [ -z "$GITDIR" ]; then
@@ -216,151 +247,272 @@ git_detect() {
 
   # When none specified, set index as being a file called .ungit in the root of
   # the git repository.
-  if [ -z "$UNGIT_INDEX" ] && [ -n "$GITROOT" ]; then
+  if [ "$UNGIT_INDEX" = "-" ]; then
+    verbose "Indexing disabled"
+    UNGIT_INDEX=""; # Switch off index completely.
+  elif [ -z "$UNGIT_INDEX" ] && [ -n "$GITROOT" ]; then
     UNGIT_INDEX=${GITROOT}/.ungit
+    verbose "Using $UNGIT_INDEX as index file"
+  fi
+
+  # Automatically turn target directory protection when applicable. Down from here
+  # UNGIT_PROTECT can always be understood as a boolean.
+  if [ "$UNGIT_PROTECT" = "auto" ]; then
+    if [ -n "$UNGIT_INDEX" ]; then
+      verbose "Turning on target directory protection"
+      UNGIT_PROTECT=1
+    else
+      UNGIT_PROTECT=0
+    fi
   fi
 }
 
-# TODO: when no argument is passed, look for and read the index file and init.
-# Initialisation will:
-# - Create the target directory, by downloading the repo URL.
 
-# At least a repository name is required.
-if [ $# -eq 0 ]; then
+charcount() {
+  printf %s\\n "$1" | grep -Fo "$2" | wc -l
+}
+
+protect() {
+  if is_true "$UNGIT_PROTECT"; then
+    chmod -R a-w "$1"
+    debug "Hierarchically made $1 read-only"
+  fi
+}
+unprotect() {
+  if is_true "$UNGIT_PROTECT"; then
+    chmod -R u+w "$1"
+    debug "Hierarchically allowed user access to $1"
+  fi
+}
+
+# Provided DESTDIR is a snapshot directory, update the index file to: add the
+# repository it points to with $1, or remove it if no argument is provided
+update_index() {
+  if [ -n "$UNGIT_INDEX" ]; then
+    INDEX_DIR=$(dirname "$UNGIT_INDEX")
+    RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
+
+    # Remove any reference to the target directory from the index and replace with
+    # the (new?) repository snapshot.
+    idx=$(mktemp)
+    if [ -f "$UNGIT_INDEX" ]; then
+      if ! grep -vE "^$RELATIVE_DEST" "$UNGIT_INDEX" > "$idx"; then
+        cp -f "$UNGIT_INDEX" "$idx"
+      fi
+    fi
+    if [ -n "${1:-}" ]; then
+      printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
+      verbose "Updating index ${UNGIT_INDEX}: $RELATIVE_DEST -> $1"
+    else
+      verbose "Removing index entry ${UNGIT_INDEX}: $RELATIVE_DEST"
+    fi
+    mv -f "$idx" "$UNGIT_INDEX"
+  fi
+}
+
+cmd_install() {
+  # Detect the git repository root and the index file
   git_detect "$(pwd)"
   if [ -n "$UNGIT_INDEX" ] && [ -f "$UNGIT_INDEX" ]; then
+    # Copy the current index to a temporary file, as adding stuff might rewrite
+    # to it otherwise.
     idx=$(mktemp)
     cp -f "$UNGIT_INDEX" "$idx"
+    # Export all the UNGIT_ variables so as to make them available to the
+    # subprocess. This is necessary since they carry the values of the
+    # command-line options passed to this process.
+    while IFS= read -r varname; do
+      # shellcheck disable=SC2163 # We want to export the variable named in varname
+      export "$varname"
+    done <<EOF
+$(set | grep -E '^UNGIT_[A-Z_]+=' | sed 's/=.*$//')
+EOF
+    # Read the index file and process each line
+    INDEX_DIR=$(dirname "$UNGIT_INDEX")
+    while IFS= read -r line || [ -n "${line:-}" ]; do
+      # Skip leading comments and empty lines so the index can be hand-written
+      # instead of just being generated.
+      if [ "${line#\#}" != "$line" ]; then
+        continue
+      fi
+      if [ -n "$line" ]; then
+        # Read the destination directory and the repository URL from the index.
+        DESTDIR=$(printf %s\\n "$line" | awk '{print $1}')
+        REPO_URL=$(printf %s\\n "$line" | awk '{print $2}')
+        if [ -n "$REPO_URL" ] && [ -n "$DESTDIR" ]; then
+          # Compute the full path of the destination directory and call this
+          # script again to add the snapshot. Do not replace existing
+          # directories unless forced.
+          DESTDIR=${INDEX_DIR}/${DESTDIR}
+          if [ -d "$DESTDIR" ]; then
+            if [ "$UNGIT_FORCE" -ge 1 ]; then
+              "$0" add "$REPO_URL" "$DESTDIR"
+            else
+              verbose "Skipping $DESTDIR, already exists. Rerun with at least -f to force"
+            fi
+          else
+            "$0" add "$REPO_URL" "$DESTDIR"
+          fi
+        fi
+      fi
+    done < "$idx"
+    # Cleanup and exit, all work was done by the recursive calls.
+    rm -f "$idx"
+    exit
   else
+    # No index file found, print usage and exit.
     usage 1>&2
   fi
-fi
+}
 
-# If the first argument is a URL, use it as is, otherwise construct the full URL
-if printf %s\\n "$1" | grep -qE '^https?://'; then
-  REPO_URL=$1
-else
-  case "$UNGIT_TYPE" in
-    gitlab)
-      REPO_URL=https://gitlab.com/$1;;
-    github)
-      REPO_URL=https://github.com/$1
-      ;;
-    *)
-      debug "Assuming github repository"
+
+cmd_add() {
+  # If the first argument is a URL, use it as is, otherwise construct the full URL
+  # using the UNGIT_TYPE variable, i.e. the type of the forge (github, gitlab,
+  # etc.)
+  if printf %s\\n "$1" | grep -qE '^https?://'; then
+    REPO_URL=$1
+  else
+    if [ "$(charcount "$1" '/')" -ge 1 ]; then
+      case "$UNGIT_TYPE" in
+        gitlab)
+          REPO_URL=https://gitlab.com/$1;;
+        github)
+          REPO_URL=https://github.com/$1
+          ;;
+        *)
+          debug "Assuming github repository"
+          UNGIT_TYPE=github
+          REPO_URL=https://github.com/$1
+          ;;
+      esac
+    else
+      error "Invalid repository name: $1"
+    fi
+  fi
+  shift
+
+  # Extract the tag, branch or commit reference as being everything after the @
+  REPO_REF=$(printf %s\\n "$REPO_URL" | grep -oE '@.*$' | cut -c 2-)
+  if [ -z "$REPO_REF" ]; then
+    REPO_REF=$UNGIT_DEFAULT_REF
+  else
+    REPO_URL=$(printf %s\\n "$REPO_URL" | sed 's/@.*$//')
+  fi
+
+  # Decide the destination directory. Construct a directory under the current one
+  # using the base name of the repository if none is specified.
+  REPO_NAME=${REPO_URL##*/}
+  if [ $# -eq 0 ]; then
+    DESTDIR=$(pwd)/$REPO_NAME
+  else
+    DESTDIR=$1
+  fi
+
+  # Lookup for a .git directory to be able to turn on "git mode"
+  git_detect "$(dirname "$DESTDIR")"
+
+  # Decide the repository type when none is specified, detect from the URL
+  if [ -z "$UNGIT_TYPE" ]; then
+    if printf %s\\n "$REPO_URL" | grep -q 'github\.com'; then
       UNGIT_TYPE=github
-      REPO_URL=https://github.com/$1
-      ;;
+    elif printf %s\\n "$REPO_URL" | grep -q 'gitlab\.com'; then
+      UNGIT_TYPE=gitlab
+    else
+      error "Unsupported repository type: $REPO_URL"
+    fi
+  fi
+
+  # Decide upon the location of the tarball in the cache directory if one is
+  # specified.
+  if [ -n "$UNGIT_CACHE" ]; then
+    mkdir -p "$UNGIT_CACHE"
+    REPO_CACHE_PATH=${UNGIT_CACHE}/${UNGIT_TYPE}-$(to_filename "${REPO_NAME}")-$(to_filename "${REPO_REF}").tar.gz
+    if [ -f "$REPO_CACHE_PATH" ] && [ "$UNGIT_FORCE" -ge 2 ]; then
+      verbose "Removing cached snapshot $REPO_CACHE_PATH"
+      rm -f "$REPO_CACHE_PATH"
+    fi
+  fi
+
+  # Copy (from cache) or download the tarball to a temporary directory
+  dwdir=$(mktemp -d)
+  if cp_or_download "${dwdir}/${REPO_NAME}.tar.gz"; then
+    debug "Written snapshot of ${REPO_URL}@${REPO_REF} to ${dwdir}/${REPO_NAME}.tar.gz"
+  else
+    rm -rf "$dwdir";  # Cleanup and exit
+    error "Could not download ${REPO_URL}@${REPO_REF} to ${dwdir}/${REPO_NAME}.tar.gz"
+  fi
+
+  # Extract the tarball to a temporary directory
+  tardir=$(mktemp -d)
+  mkdir -p "$tardir"
+  tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" -C "$tardir"
+  trace "Extracted ${dwdir}/${REPO_NAME}.tar.gz to $tardir"
+
+  # Create the destination directory and copy the contents of the tarball to it.
+  if [ -d "$DESTDIR" ]; then
+    if [ "$UNGIT_FORCE" -ge 1 ]; then
+      verbose "Removing all content from directory ${DESTDIR}"
+      unprotect "$DESTDIR"
+      rm -rf "$DESTDIR"
+    elif is_true "$UNGIT_KEEP"; then
+      verbose "Current directory content under ${DESTDIR} kept as-is"
+      unprotect "$DESTDIR"
+    else
+      error "Destination directory ${DESTDIR} already exists. Use -f to overwrite"
+    fi
+  fi
+  mkdir -p "${DESTDIR}"
+  tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
+  verbose "Copied snapshot of ${REPO_URL}@${REPO_REF} to ${DESTDIR}"
+  protect "$DESTDIR"
+
+  # Keep a copy of the tarball in the cache directory if one is specified.
+  if [ -n "$UNGIT_CACHE" ]; then
+    verbose "Caching snapshot source as $REPO_CACHE_PATH"
+    mv -f "${dwdir}/${REPO_NAME}.tar.gz" "$REPO_CACHE_PATH"
+  fi
+
+  # Maintain an index of all the snapshots created and from where.
+  update_index "$REPO_URL"
+
+  # Cleanup.
+  rm -rf "$dwdir" "$tardir"
+}
+
+
+cmd_delete() {
+  DESTDIR=$1
+  if  [ -d "$DESTDIR" ]; then
+    git_detect "$DESTDIR"
+    update_index
+    verbose "Removing all content from directory ${DESTDIR}"
+    unprotect "$DESTDIR"
+    rm -rf "$DESTDIR"
+  else
+    error "Directory ${DESTDIR} does not exist"
+  fi
+}
+
+
+# When no repository URL/name is specified, look for an index file and process
+# it, making sure the references that it contains are on disk.
+if [ $# -eq 0 ]; then
+  cmd_install
+else
+  case "$1" in
+    help)
+      shift; usage;;
+    install)
+      shift; cmd_install;;
+    add)
+      shift; cmd_add "$@";;
+    remove)
+      shift; cmd_delete "$@";;
+    delete)
+      shift; cmd_delete "$@";;
+    *)
+      # Default is to add a repository
+      cmd_add "$@";;
   esac
 fi
-shift
-
-# Extract the tag, branch or commit reference as being everything after the @
-REPO_REF=$(printf %s\\n "$REPO_URL" | grep -oE '@.*$' | cut -c 2-)
-if [ -z "$REPO_REF" ]; then
-  REPO_REF=$UNGIT_DEFAULT_REF
-else
-  REPO_URL=$(printf %s\\n "$REPO_URL" | sed 's/@.*$//')
-fi
-
-# Decide the destination directory. Construct a directory under the current one
-# using the base name of the repository if none is specified.
-REPO_NAME=${REPO_URL##*/}
-if [ $# -eq 0 ]; then
-  DESTDIR=$(pwd)/$REPO_NAME
-else
-  DESTDIR=$1
-fi
-if [ -d "$DESTDIR" ] && [ "$UNGIT_FORCE" -eq 0 ]; then
-  error "Destination directory $DESTDIR already exists. Use -f to overwrite."
-fi
-
-# Lookup for a .git directory to be able to turn on "git mode"
-git_detect "$(dirname "$DESTDIR")"
-
-# Automatically turn target directory protection when applicable. Down from here
-# UNGIT_PROTECT can always be understood as a boolean.
-if [ "$UNGIT_PROTECT" = "auto" ]; then
-  if [ -n "$GITROOT" ]; then
-    verbose "Turning on target directory protection"
-    UNGIT_PROTECT=1
-  else
-    UNGIT_PROTECT=0
-  fi
-fi
-
-# Decide the repository type when none is specified, detect from the URL
-if [ -z "$UNGIT_TYPE" ]; then
-  if printf %s\\n "$REPO_URL" | grep -q 'github\.com'; then
-    UNGIT_TYPE=github
-  elif printf %s\\n "$REPO_URL" | grep -q 'gitlab\.com'; then
-    UNGIT_TYPE=gitlab
-  else
-    error "Unsupported repository type: $REPO_URL"
-  fi
-fi
-
-# Decide upon the location of the tarball in the cache directory if one is
-# specified.
-if [ -n "$UNGIT_CACHE" ]; then
-  mkdir -p "$UNGIT_CACHE"
-  REPO_CACHE_PATH=${UNGIT_CACHE}/${UNGIT_TYPE}-$(to_filename "${REPO_NAME}")-$(to_filename "${REPO_REF}").tar.gz
-  if [ -f "$REPO_CACHE_PATH" ] && [ "$UNGIT_FORCE" -ge 2 ]; then
-    verbose "Removing cached snapshot $REPO_CACHE_PATH"
-    rm -f "$REPO_CACHE_PATH"
-  fi
-fi
-
-# Copy (from cache) or download the tarball to a temporary directory and extract
-# it to another temporary directory.
-dwdir=$(mktemp -d)
-if cp_or_download "${dwdir}/${REPO_NAME}.tar.gz"; then
-  debug "Written snapshot of ${REPO_URL}@${REPO_REF} to ${REPO_NAME}.tar.gz"
-else
-  rm -rf "$dwdir";  # Cleanup and exit
-  error "Could not download ${REPO_URL}@${REPO_REF} to ${REPO_NAME}.tar.gz"
-fi
-
-tardir=$(mktemp -d)
-mkdir -p "$tardir"
-tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" -C "$tardir"
-
-# Create the destination directory and copy the contents of the tarball to it.
-if [ -d "$DESTDIR" ]; then
-  if is_true "$UNGIT_PROTECT"; then
-    chmod -R u-w "$DESTDIR"
-  fi
-  if [ "$UNGIT_KEEP" -eq 1 ]; then
-    verbose "Extracting $UNGIT_TYPE snapshot to ${DESTDIR}, directory content will be entirely replaced."
-  else
-    verbose "Extracting $UNGIT_TYPE snapshot to ${DESTDIR}, current directory content kept."
-    rm -rf "$DESTDIR"
-  fi
-fi
-mkdir -p "${DESTDIR}"
-tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
-if is_true "$UNGIT_PROTECT"; then
-  chmod -R a-w "$DESTDIR"
-fi
-
-# Keep a copy of the tarball in the cache directory if one is specified.
-if [ -n "$UNGIT_CACHE" ]; then
-  verbose "Caching snapshot source as $REPO_CACHE_PATH"
-  mv -f "${dwdir}/${REPO_NAME}.tar.gz" "$REPO_CACHE_PATH"
-fi
-
-# Maintain an index of all the snapshots created and from where.
-if [ -n "$UNGIT_INDEX" ]; then
-  INDEX_DIR=$(dirname "$UNGIT_INDEX")
-  RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
-
-  # Remove any reference to the target directory from the index and replace with
-  # the (new?) repository snapshot.
-  idx=$(mktemp)
-  grep -v "^$RELATIVE_DEST" > "$idx"
-  printf '%s\t%s\n' "$RELATIVE_DEST" "$REPO_URL" >> "$idx"
-  mv -f "$idx" "$UNGIT_INDEX"
-fi
-
-# Cleanup.
-rm -rf "$dwdir" "$tardir"
