@@ -32,8 +32,8 @@ UNGIT_FORCE=${UNGIT_FORCE:-0}
 UNGIT_KEEP=${UNGIT_KEEP:-0}
 
 # Protect target directory and files from being changed by making them
-# read-only.
-UNGIT_PROTECT=${UNGIT_PROTECT:-0}
+# read-only. Boolean or auto for adapt to git mode
+UNGIT_PROTECT=${UNGIT_PROTECT:-"auto"}
 
 # Directory where to store the downloaded tarballs. Defaults to the directory
 # called ungit in the XDG cache directory.
@@ -66,7 +66,7 @@ usage() {
 }
 
 
-while getopts "c:fi:pr:t:vh-" opt; do
+while getopts "c:fi:p:r:t:vh-" opt; do
   case "$opt" in
     c) # Set the cache directory. Defaults to $XDG_CACHE_HOME/ungit. Empty to disable cache.
       UNGIT_CACHE=$OPTARG;;
@@ -74,8 +74,8 @@ while getopts "c:fi:pr:t:vh-" opt; do
       UNGIT_FORCE=$((UNGIT_FORCE+1));;
     i) # Set the index file. Defaults to .ungit in the root of the git repository holding the destination directory.
       UNGIT_INDEX=$OPTARG;;
-    p) # Protect target directory and files from being changed by making them read-only
-      UNGIT_PROTECT=1;;
+    p) # Protect target directory and files from being changed by making them read-only. Boolean or "auto" to turn on inside git repositories.
+      UNGIT_PROTECT=$OPTARG;;
     r) # Set the default reference, main by default
       UNGIT_DEFAULT_REF=$OPTARG;;
     t) # Force the repository type (github or gitlab), empty to autodetect from URL. Defaults to github
@@ -107,6 +107,9 @@ debug() { if [ "${UNGIT_VERBOSE:-0}" -ge "2" ]; then _log "$1" DBG; fi; }
 verbose() { if [ "${UNGIT_VERBOSE:-0}" -ge "1" ]; then _log "$1" NFO; fi; }
 warning() { _log "$1" WRN; }
 error() { _log "$1" ERR && exit 1; }
+
+is_false() { [ "$1" = "false" ] || { [ "$1" = "off" ] || [ "$1" = "0" ]; }; }
+is_true() { ! is_false "$1"; }
 
 # Download the url passed as the first argument to the destination path passed
 # as a second argument. The destination will be the same as the basename of the
@@ -199,15 +202,38 @@ relpath() {
   printf %s\\n "${b}${d#"$s"/}"
 }
 
+# Look up the hierarchy of $1 for a .git directory to be able to turn on "git
+# mode". Set the $GITROOT variable to the root location of the git repository
+# this is called from.
+git_detect() {
+  GITDIR=$(climb_and_find .git "$1" | head -n 1)
+  if [ -z "$GITDIR" ]; then
+    trace "Could not find a .git directory in $1"
+    GITROOT=""
+  else
+    GITROOT=$(dirname "$GITDIR")
+  fi
+
+  # When none specified, set index as being a file called .ungit in the root of
+  # the git repository.
+  if [ -z "$UNGIT_INDEX" ] && [ -n "$GITROOT" ]; then
+    UNGIT_INDEX=${GITROOT}/.ungit
+  fi
+}
+
 # TODO: when no argument is passed, look for and read the index file and init.
 # Initialisation will:
 # - Create the target directory, by downloading the repo URL.
 
-# TODO: When in git mode, automatically turn protection on to prevent accidental changes of a dependent repo.
-
 # At least a repository name is required.
 if [ $# -eq 0 ]; then
-  usage 1>&2
+  git_detect "$(pwd)"
+  if [ -n "$UNGIT_INDEX" ] && [ -f "$UNGIT_INDEX" ]; then
+    idx=$(mktemp)
+    cp -f "$UNGIT_INDEX" "$idx"
+  else
+    usage 1>&2
+  fi
 fi
 
 # If the first argument is a URL, use it as is, otherwise construct the full URL
@@ -249,19 +275,17 @@ if [ -d "$DESTDIR" ] && [ "$UNGIT_FORCE" -eq 0 ]; then
   error "Destination directory $DESTDIR already exists. Use -f to overwrite."
 fi
 
-if [ -z "$UNGIT_INDEX" ]; then
-  # Lookup for a .git directory.
-  GITDIR=$(climb_and_find .git "$(dirname "$DESTDIR")" | head -n 1)
-  if [ -z "$GITDIR" ]; then
-    debug "Could not find a .git directory in $(dirname "$DESTDIR")"
-    GITROOT=""
-  else
-    GITROOT=$(dirname "$GITDIR")
-  fi
+# Lookup for a .git directory to be able to turn on "git mode"
+git_detect "$(dirname "$DESTDIR")"
 
-  # Set index as being a file called .ungit in the root of the git repository
+# Automatically turn target directory protection when applicable. Down from here
+# UNGIT_PROTECT can always be understood as a boolean.
+if [ "$UNGIT_PROTECT" = "auto" ]; then
   if [ -n "$GITROOT" ]; then
-    UNGIT_INDEX=${GITROOT}/.ungit
+    verbose "Turning on target directory protection"
+    UNGIT_PROTECT=1
+  else
+    UNGIT_PROTECT=0
   fi
 fi
 
@@ -303,7 +327,7 @@ tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" -C "$tardir"
 
 # Create the destination directory and copy the contents of the tarball to it.
 if [ -d "$DESTDIR" ]; then
-  if [ "$UNGIT_PROTECT" -eq 1 ]; then
+  if is_true "$UNGIT_PROTECT"; then
     chmod -R u-w "$DESTDIR"
   fi
   if [ "$UNGIT_KEEP" -eq 1 ]; then
@@ -315,7 +339,7 @@ if [ -d "$DESTDIR" ]; then
 fi
 mkdir -p "${DESTDIR}"
 tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
-if [ "$UNGIT_PROTECT" -eq 1 ]; then
+if is_true "$UNGIT_PROTECT"; then
   chmod -R a-w "$DESTDIR"
 fi
 
@@ -329,9 +353,13 @@ fi
 if [ -n "$UNGIT_INDEX" ]; then
   INDEX_DIR=$(dirname "$UNGIT_INDEX")
   RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
-  # TODO: Remove any existing entry for the same directory.
-  # TODO: Inverse order of dir and URL?
-  printf '%s\t%s\n' "$REPO_URL" "$RELATIVE_DEST" >> "$UNGIT_INDEX"
+
+  # Remove any reference to the target directory from the index and replace with
+  # the (new?) repository snapshot.
+  idx=$(mktemp)
+  grep -v "^$RELATIVE_DEST" > "$idx"
+  printf '%s\t%s\n' "$RELATIVE_DEST" "$REPO_URL" >> "$idx"
+  mv -f "$idx" "$UNGIT_INDEX"
 fi
 
 # Cleanup.
