@@ -67,8 +67,7 @@ Usage:
   where [options] are as above, [command] is one of:
     install: Install all the snapshots listed in the index file
     add:     Add a snapshot of a repository to the index
-    remove:  Remove a snapshot from the index
-    delete:  Remove a snapshot from the index
+    remove:  Remove a snapshot from the index (alias: delete, rm)
     help:    Print this help and exit
 
   When no known command is specified:
@@ -400,8 +399,8 @@ cmd_add() {
     REPO_URL=$(printf %s\\n "$REPO_URL" | sed 's/@.*$//')
   fi
 
-  # Decide the destination directory. Construct a directory under the current one
-  # using the base name of the repository if none is specified.
+  # Decide the destination directory. Construct a directory under the current
+  # one using the base name of the repository if none is specified.
   REPO_NAME=${REPO_URL##*/}
   if [ $# -eq 0 ]; then
     DESTDIR=$(pwd)/$REPO_NAME
@@ -482,10 +481,10 @@ cmd_add() {
 
 
 cmd_delete() {
-  DESTDIR=$1
+  DESTDIR=$1;  # Make sure it is set
   if  [ -d "$DESTDIR" ]; then
     git_detect "$DESTDIR"
-    update_index
+    update_index;  # Will remove the DESTDIR entry from the index
     verbose "Removing all content from directory ${DESTDIR}"
     unprotect "$DESTDIR"
     rm -rf "$DESTDIR"
@@ -495,11 +494,13 @@ cmd_delete() {
 }
 
 
-# When no repository URL/name is specified, look for an index file and process
-# it, making sure the references that it contains are on disk.
+# When arguments are given, look for an index file and process it, making sure
+# the references that it contains are on disk.
 if [ $# -eq 0 ]; then
   cmd_install
 else
+  # When arguments are given, look for a command and process it. When no command
+  # is given, assume add.
   case "$1" in
     help)
       shift; usage;;
@@ -510,6 +511,8 @@ else
     remove)
       shift; cmd_delete "$@";;
     delete)
+      shift; cmd_delete "$@";;
+    rm)
       shift; cmd_delete "$@";;
     *)
       # Default is to add a repository
