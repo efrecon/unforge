@@ -1,0 +1,60 @@
+name: ungit
+description: >
+  Download a branch, tag or commit from a git repository and extract it to a
+  directory, without `git`. When you do not need history, this is quicker than
+  using action/checkout.
+author: Emmanuel Frecon <efrecon+github@gmail.com>
+branding:
+  icon: download
+  color: blue
+
+inputs:
+  repository:
+    description: 'Repository name with owner. For example, `efrecon/ungit`.'
+    default: ${{ github.repository }}
+  ref:
+    description: >
+      The branch, tag or SHA to checkout. When checking out the repository that
+      triggered a workflow, this defaults to the reference or SHA for that
+      event.  Otherwise, uses the default branch.
+  token:
+    description: >
+      The token to use to access the repository at the remote/local forge.
+      Defaults to the token of the workflow.
+    default: ${{ github.token }}
+  type:
+    description: >
+      The type of the forge to download from, one of `github` or `gitlab`
+    default: github
+  path:
+    description: 'Relative path under $GITHUB_WORKSPACE to place the repository'
+    required: false
+  options:
+    description: >
+      Additional options to `ungit.sh` script. This is a semi-internal input and
+      should only be used for debugging.
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Download
+      id: download
+      shell: bash
+      run: |
+        set -eu
+        ref=${{ inputs.ref }}
+        if [ -z '$ref']; then
+          if [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
+            ref = '${{ github.ref_name }}'
+          else
+            ref = 'main'
+          fi
+        fi
+
+        ${{ github.action_path }}/ungit.sh \
+          -t "${{ inputs.type }}" \
+          -T "${{ inputs.token }}" \
+          ${{ inputs.options }} \
+          add \
+            "${{ inputs.repository }}@${ref}" \
+            "${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
