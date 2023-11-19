@@ -43,10 +43,10 @@ runs:
       run: |
         set -eu
         ref=${{ inputs.ref }}
-        if [ -z '$ref' ] && [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
+        if [ -z "$ref" ] && [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
           ref=${{ github.ref_name }}
         fi
-        if [ -z '$ref' ]; then
+        if [ -z "$ref" ]; then
           repo=${{ inputs.repository }}
         else
           repo=${{ inputs.repository }}@${ref}
