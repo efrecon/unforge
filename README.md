@@ -206,7 +206,3 @@ There are a number of scenarios where this can be useful:
 
   [submodules]: https://git-scm.com/book/en/v2/Git-Tools-Submodules
   [subtree]: https://git.kernel.org/pub/scm/git/git.git/plain/contrib/subtree/git-subtree.txt
-
-## Ideas
-
-+ Implement a github action on top.
