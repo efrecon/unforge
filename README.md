@@ -130,12 +130,14 @@ workspace at the runner.
 
 ## Usage
 
-The behaviour of `ungit` is controlled by a series of environment variables --
-all starting with `UNGIT_` -- and by its command-line (short) options. Options
-have precedence over environment variables. The first argument to `ungit` is a
-command, and this command defaults to `add`. Provided `ungit.sh` is in your
-`$PATH`, run the following command to get help over both the variables, the CLI
-options and commands.
+### Script
+
+The behaviour of [`ungit`](./ungit.sh) is controlled by a series of environment
+variables -- all starting with `UNGIT_` -- and by its command-line (short)
+options. Options have precedence over environment variables. The first argument
+to `ungit` is a command, and this command defaults to `add`. Provided `ungit.sh`
+is in your `$PATH`, run the following command to get help over both the
+variables, the CLI options and commands.
 
 ```bash
 ungit.sh -h
@@ -157,6 +159,13 @@ options:
 This script has minimal dependencies. It has been tested under `bash` and `ash`
 and will be able to download content as long as `curl` (preferred) or `wget`
 (including the busybox version) are available at the `$PATH`.
+
+### GitHub Action
+
+The GitHub Action uses inputs named after the ones of [actions/checkout]. It is
+a composite action that interfaces almost 1-1 the [`ungit`](./ungit.sh)
+implementation script. For an exact list of inputs, consult the
+[action](./action.yml).
 
 ## Highlights
 
