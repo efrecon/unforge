@@ -45,11 +45,12 @@ runs:
         ref=${{ inputs.ref }}
         if [ -z '$ref' ]; then
           if [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
-            ref = '${{ github.ref_name }}'
+            ref=${{ github.ref_name }}
           else
-            ref = 'main'
+            ref=main
           fi
         fi
+        echo "Using ref: $ref"
 
         ${{ github.action_path }}/ungit.sh \
           -t "${{ inputs.type }}" \
