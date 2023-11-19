@@ -156,12 +156,13 @@ and will be able to download content as long as `curl` (preferred) or `wget`
   automatically turned on.
 + When run from within a `git` repository, will automatically use a file called
   `.ungit` at the root of the repository as an index.
++ `ungit` also works with private repositories as long as you can pass an
+  authentication token with the `-T` option.
 
   [XDG]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
 ## Limitations
 
-+ `ungit` does not work for private repositories.
 + If the target repository contains [submodules], the content of these
   submodules will not be part of the downloaded tarball, nor the directory
   snapshot.
