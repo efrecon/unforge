@@ -41,21 +41,31 @@ runs:
       id: download
       shell: bash
       run: |
-        set -eu
+        set -eu;  # Exit on error or undefined variable
+
+        # Decide upon the reference to use
         ref=${{ inputs.ref }}
         if [ -z "$ref" ] && [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
           ref=${{ github.ref_name }}
         fi
+
+        # Use reference to decide upon the repository specification
         if [ -z "$ref" ]; then
           repo=${{ inputs.repository }}
         else
           repo=${{ inputs.repository }}@${ref}
         fi
-        echo "Using repo: $repo"
+
+        # Construct target directory
+        if [ -z '${{ inputs.path }}' ]; then
+          target=${GITHUB_WORKSPACE%/}
+        else
+          target="${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
+        fi
 
         ${{ github.action_path }}/ungit.sh \
           -t "${{ inputs.type }}" \
           -T "${{ inputs.token }}" \
           -f \
           ${{ inputs.options }} \
-          add "$repo" "${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
+          add "$repo" "$target"
