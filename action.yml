@@ -56,5 +56,6 @@ runs:
         ${{ github.action_path }}/ungit.sh \
           -t "${{ inputs.type }}" \
           -T "${{ inputs.token }}" \
+          -f \
           ${{ inputs.options }} \
           add "$repo" "${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
