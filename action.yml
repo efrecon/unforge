@@ -43,19 +43,18 @@ runs:
       run: |
         set -eu
         ref=${{ inputs.ref }}
-        if [ -z '$ref' ]; then
-          if [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
-            ref=${{ github.ref_name }}
-          else
-            ref=main
-          fi
+        if [ -z '$ref' ] && [ '${{ inputs.repository }}' = '${{ github.repository}}' ]; then
+          ref=${{ github.ref_name }}
         fi
-        echo "Using ref: $ref"
+        if [ -z '$ref' ]; then
+          repo=${{ inputs.repository }}
+        else
+          repo=${{ inputs.repository }}@${ref}
+        fi
+        echo "Using repo: $repo"
 
         ${{ github.action_path }}/ungit.sh \
           -t "${{ inputs.type }}" \
           -T "${{ inputs.token }}" \
           ${{ inputs.options }} \
-          add \
-            "${{ inputs.repository }}@${ref}" \
-            "${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
+          add "$repo" "${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
