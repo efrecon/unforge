@@ -49,6 +49,11 @@ UNGIT_INDEX=${UNGIT_INDEX:-}
 # limit, and risk of infinite loop.
 UNGIT_RFIND=${UNGIT_RFIND:-25}
 
+# Token to use for authentication with the forge. When empty, no authentication
+# will happen. When using tokens, the URL will be rewriten to the one of the API
+# of each forge.
+UNGIT_TOKEN=${UNGIT_TOKEN:-}
+
 # Print usage out of content of main script and exit.
 usage() {
   # This uses the comments behind the options to show the help. Not extremly
@@ -80,7 +85,7 @@ EOF
 }
 
 
-while getopts "c:fi:p:r:t:vh-" opt; do
+while getopts "c:fi:p:r:t:T:vh-" opt; do
   case "$opt" in
     c) # Set the cache directory. Defaults to $XDG_CACHE_HOME/ungit. Empty to disable cache.
       UNGIT_CACHE=$OPTARG;;
@@ -94,6 +99,8 @@ while getopts "c:fi:p:r:t:vh-" opt; do
       UNGIT_DEFAULT_REF=$OPTARG;;
     t) # Force the repository type (github or gitlab), empty to autodetect from URL. Defaults to github
       UNGIT_TYPE=$OPTARG;;
+    T) # Set the authentication token to use with the forge
+      UNGIT_TOKEN=$OPTARG;;
     v) # Increase verbosity
       UNGIT_VERBOSE=$((UNGIT_VERBOSE+1));;
     h) # Print usage and exit
@@ -126,15 +133,36 @@ error() { _log "$1" ERR && exit 1; }
 is_false() { [ "$1" = "false" ] || { [ "$1" = "off" ] || [ "$1" = "0" ]; }; }
 is_true() { ! is_false "$1"; }
 
+# URL encode the string passed as a parameter
+urlencode() {
+  string=$1
+  while [ -n "$string" ]; do
+    tail=${string#?}
+    head=${string%$tail}
+    case $head in
+      [-._~0-9A-Za-z]) printf %c "$head";;
+      *) printf %%%02x "'$head"
+    esac
+    string=$tail
+  done
+  printf \\n
+}
+
 # Download the url passed as the first argument to the destination path passed
 # as a second argument. The destination will be the same as the basename of the
 # URL, in the current directory, if omitted.
 download() {
-  debug "Downloading $1 to ${2:-$(basename "$1")}"
+  _URL=$1
+  _TGT=${2:-$(basename "$1")}
+  shift 2
+
+  debug "Downloading $_URL to $_TGT"
   if command -v curl >/dev/null; then
-    curl -sSL -o "${2:-$(basename "$1")}" "$1"
+    set -- -sSL -o "$_TGT" "$@" "$_URL"
+    curl "$@"
   elif command -v wget >/dev/null; then
-    wget -q -O "${2:-$(basename "$1")}" "$1"
+    set -- -q -O "$_TGT" "$@" "$_URL"
+    wget "$@"
   else
     error "You need curl or wget installed to download files!"
   fi
@@ -156,21 +184,37 @@ download_gz() {
   fi
 }
 
-# Download the $REPO_URL at the $REPO_REF reference from GitHub. Consider the
-# reference to be a banch name first, then a tag name, then a commit hash.
+# Download the $REPO_URL at the $REPO_REF reference from GitHub. When a token is
+# provided, rewrite the URL to point to the API URL and passed the token.
 download_github_archive() {
-  # Note: does not perform any check on the validity of the reference. This
-  # could be done for commit references.
-  download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
-    download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
-    download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
+  if [ -n "$UNGIT_TOKEN" ]; then
+    # Add api. in front of the domain name and /repos/ in the path
+    DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].]+)/~https://api.\1/repos/~')
+    download_gz "${DW_ROOT%/}/tarball/${REPO_REF}" "${1:-}" --header "Authorization: Bearer $UNGIT_TOKEN"
+  else
+    # Consider the reference to be a banch name first, then a tag name, then a
+    # commit hash. Note: does not perform any check on the validity of the
+    # reference. This could be done for commit references.
+    download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
+      download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
+      download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
+  fi
 }
 
 # Download the $REPO_URL at the $REPO_REF reference from GitLab. Rely on
 # GitLab's algorithm for resolving the reference to its real type: banch name,
 # tag name, or commit hash.
 download_gitlab_archive() {
-  download_gz "${REPO_URL%/}/-/archive/${REPO_REF}/${REPO_NAME}-$(to_filename "${REPO_REF}").tar.gz" "${1:-}"
+  if [ -n "$UNGIT_TOKEN" ]; then
+    # Extract the repository name from the URL and the root of the domain.
+    _repo=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~\2~')
+    DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~https://\1/~')
+    # Perform API call to get the archive URL and download it. For type to
+    # .tar.gz, even though this is the default.
+    download_gz "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")/repository/archive.tar.gz?sha=${REPO_REF}" "${1:-}" --header "PRIVATE-TOKEN: $UNGIT_TOKEN"
+  else
+    download_gz "${REPO_URL%/}/-/archive/${REPO_REF}/${REPO_NAME}-$(to_filename "${REPO_REF}").tar.gz" "${1:-}"
+  fi
 }
 
 # If the repository reference at $REPO_REF from $REPO_URL is cached, copy it to
@@ -445,7 +489,7 @@ cmd_add() {
   # Extract the tarball to a temporary directory
   tardir=$(mktemp -d)
   mkdir -p "$tardir"
-  tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" -C "$tardir"
+  tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" --strip-component 1 -C "$tardir"
   trace "Extracted ${dwdir}/${REPO_NAME}.tar.gz to $tardir"
 
   # Create the destination directory and copy the contents of the tarball to it.
@@ -462,7 +506,7 @@ cmd_add() {
     fi
   fi
   mkdir -p "${DESTDIR}"
-  tar -C "${tardir}/${REPO_NAME}-$(to_filename "${REPO_REF}")" -cf - . | tar -C "${DESTDIR}" -xf -
+  tar -C "${tardir}" -cf - . | tar -C "${DESTDIR}" -xf -
   verbose "Copied snapshot of ${REPO_URL}@${REPO_REF} to ${DESTDIR}"
   protect "$DESTDIR"
 

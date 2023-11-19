@@ -4,7 +4,8 @@ Fetch the content of a forge's repository at a given reference into a local
 directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus entirely
 bypasses `git`. You will get a snapshot of the repository at that reference,
 with no history. In most cases, this is much quicker than cloning the
-repository.
+repository. `ungit` also implements a GitHub action, with a behaviour and inputs
+similar to [actions/checkout], but without the history.
 
 `ungit` can detect that the destination directory belongs to a git repository.
 In that case it will maintain an index of such snapshots in a file called
@@ -13,6 +14,8 @@ the [XDG] cache to avoid unecessary downloads.
 
 Read further down for a more detailed list of `ungit`'s [features](#highlights)
 and [limitations](#limitations), or jump straight to the [examples](#examples).
+
+  [actions/checkout]: https://github.com/actions/checkout
 
 ## Examples
 
@@ -102,6 +105,29 @@ from the index file.
 ungit.sh -i .ungit remove ungit
 ```
 
+### As a GitHub Action
+
+#### Checkout Current Project
+
+Checkout the current project at the current reference, in the current workspace
+at the runner.
+
+```yaml
+- uses: efrecon/ungit
+```
+
+#### Checkout Another Project
+
+Checkout the `efrecon/ungit` project, at a given reference in the current
+workspace at the runner.
+
+```yaml
+- uses: efrecon/ungit
+  with:
+    repository: efrecon/ungit
+    ref: 34bc76507d0e7722811720532587dd6547e8893a
+```
+
 ## Usage
 
 The behaviour of `ungit` is controlled by a series of environment variables --
@@ -156,12 +182,13 @@ and will be able to download content as long as `curl` (preferred) or `wget`
   automatically turned on.
 + When run from within a `git` repository, will automatically use a file called
   `.ungit` at the root of the repository as an index.
++ `ungit` also works with private repositories as long as you can pass an
+  authentication token with the `-T` option.
 
   [XDG]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
 ## Limitations
 
-+ `ungit` does not work for private repositories.
 + If the target repository contains [submodules], the content of these
   submodules will not be part of the downloaded tarball, nor the directory
   snapshot.
@@ -179,7 +206,3 @@ There are a number of scenarios where this can be useful:
 
   [submodules]: https://git-scm.com/book/en/v2/Git-Tools-Submodules
   [subtree]: https://git.kernel.org/pub/scm/git/git.git/plain/contrib/subtree/git-subtree.txt
-
-## Ideas
-
-+ Implement a github action on top.
