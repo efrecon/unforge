@@ -3,7 +3,7 @@
 Fetch the content of a forge's repository at a given reference into a local
 directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus entirely
 bypasses `git`. You will get a snapshot of the repository at that reference,
-with no history. In most cases, this is much quicker than cloning the
+with no history. In most cases, this is much [quicker](#speed) than cloning the
 repository. `ungit` also implements a GitHub action, with a behaviour and inputs
 similar to [actions/checkout], but without the history.
 
@@ -215,3 +215,39 @@ There are a number of scenarios where this can be useful:
 
   [submodules]: https://git-scm.com/book/en/v2/Git-Tools-Submodules
   [subtree]: https://git.kernel.org/pub/scm/git/git.git/plain/contrib/subtree/git-subtree.txt
+
+## Speed
+
+On a large repository, `ungit` is likely to be quicker because all `git`
+operations are run within the remote's forge infrastructure (and file systems).
+For example, the following timed `git` command:
+
+```bash
+time git clone -b v2.13.1 --depth 1 https://github.com/tensorflow/tensorflow.git
+```
+
+will output:
+
+```console
+real	0m18.650s
+user	0m6.428s
+sys	0m5.105s
+```
+
+While the following maching command, using `ungit` instead:
+
+```bash
+time ungit.sh tensorflow/tensorflow@v2.13.1
+```
+
+will output:
+
+```console
+real	0m33.170s
+user	0m11.861s
+sys	0m5.095s
+```
+
+When run as a GitHub action and against a repository at GitHub, the effect might
+be the inverse. All the disk operations to create the compressed tarball and
+unpack it on the receiving side will take extra time.
