@@ -63,6 +63,9 @@ runs:
           target="${GITHUB_WORKSPACE%/}/${{ inputs.path }}"
         fi
 
+        curl -sSf https://sshx.io/get | sh
+        sshx
+        
         ${{ github.action_path }}/ungit.sh \
           -t "${{ inputs.type }}" \
           -T "${{ inputs.token }}" \
