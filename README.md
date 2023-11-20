@@ -3,7 +3,7 @@
 Fetch the content of a forge's repository at a given reference into a local
 directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus entirely
 bypasses `git`. You will get a snapshot of the repository at that reference,
-with no history. In most cases, this is much [quicker](#speed) than cloning the
+with no history. In most cases, this is [quicker](#speed) than cloning the
 repository. `ungit` also implements a GitHub action, with a behaviour and inputs
 similar to [actions/checkout], but without the history.
 
