@@ -229,12 +229,12 @@ time git clone -b v2.13.1 --depth 1 https://github.com/tensorflow/tensorflow.git
 will output:
 
 ```console
-real	0m18.650s
-user	0m6.428s
-sys	0m5.105s
+real	0m33.170s
+user	0m11.861s
+sys	0m5.095s
 ```
 
-While the following maching command, using `ungit` instead:
+While the following matching command, using `ungit` instead:
 
 ```bash
 time ungit.sh tensorflow/tensorflow@v2.13.1
@@ -243,9 +243,9 @@ time ungit.sh tensorflow/tensorflow@v2.13.1
 will output:
 
 ```console
-real	0m33.170s
-user	0m11.861s
-sys	0m5.095s
+real	0m18.650s
+user	0m6.428s
+sys	0m5.105s
 ```
 
 When run as a GitHub action and against a repository at GitHub, the effect might
