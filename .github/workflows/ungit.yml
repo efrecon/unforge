@@ -29,3 +29,7 @@
             UNGIT_INDEX: "-"
           with:
             path: __ungit__
+        - name: result
+          shell: bash
+          run: |
+            ls -lRh __ungit__
