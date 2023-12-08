@@ -68,4 +68,5 @@ runs:
         "${{ github.action_path }}/ungit.sh" \
           -c '' \
           -f \
+          -v \
           add "$repo" "$target"
