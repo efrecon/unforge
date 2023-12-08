@@ -25,5 +25,7 @@
             fetch-depth: 0
         - name: ungit
           uses: ./
+          env:
+            UNGIT_INDEX: "-"
           with:
             path: __ungit__
