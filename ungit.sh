@@ -335,19 +335,18 @@ update_index() {
     INDEX_DIR=$(dirname "$UNGIT_INDEX")
     RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
 
-    # Remove any reference to the target directory from the index and replace with
-    # the (new?) repository snapshot.
+    # Remove any reference to the target directory from the index
     idx=$(mktemp)
     if [ -f "$UNGIT_INDEX" ]; then
-      if ! grep -vE "^$RELATIVE_DEST" "$UNGIT_INDEX" > "$idx"; then
-        cp -f "$UNGIT_INDEX" "$idx"
-      fi
+      grep -v "^$RELATIVE_DEST" "$UNGIT_INDEX" > "$idx" || true
     fi
+
+    # Add the reference to the (new?) repository snapshot, if relevant
     if [ -n "${1:-}" ]; then
       printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
-      verbose "Updating index ${UNGIT_INDEX}: $RELATIVE_DEST -> $1"
+      verbose "Updated index ${UNGIT_INDEX}: $RELATIVE_DEST -> $1"
     else
-      verbose "Removing index entry ${UNGIT_INDEX}: $RELATIVE_DEST"
+      verbose "Removed index entry ${UNGIT_INDEX}: $RELATIVE_DEST"
     fi
     mv -f "$idx" "$UNGIT_INDEX"
   fi
