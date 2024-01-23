@@ -192,12 +192,20 @@ download_github_archive() {
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].]+)/~https://api.\1/repos/~')
     download_gz "${DW_ROOT%/}/tarball/${REPO_REF}" "${1:-}" --header "Authorization: Bearer $UNGIT_TOKEN"
   else
-    # Consider the reference to be a banch name first, then a tag name, then a
-    # commit hash. Note: does not perform any check on the validity of the
-    # reference. This could be done for commit references.
-    download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
-      download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
+    # Check if the reference is a fully-formed reference, i.e. starts with
+    # refs/. When it is, download deterministically. Otherwise, try to download
+    # from the various possible locations.
+    if printf %s\\n "$REPO_REF" | grep -q '^refs/'; then
       download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
+    else
+      # Consider the reference to be a banch name first, then a tag name, then a
+      # pull request, then a commit hash. Note: does not perform any check on
+      # the validity of the reference. This could be done for commit references.
+      download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
+        download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
+        download_gz "${REPO_URL%/}/archive/refs/pull/${REPO_REF}.tar.gz" "${1:-}" ||
+        download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
+    fi
   fi
 }
 
@@ -335,19 +343,18 @@ update_index() {
     INDEX_DIR=$(dirname "$UNGIT_INDEX")
     RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
 
-    # Remove any reference to the target directory from the index and replace with
-    # the (new?) repository snapshot.
+    # Remove any reference to the target directory from the index
     idx=$(mktemp)
     if [ -f "$UNGIT_INDEX" ]; then
-      if ! grep -vE "^$RELATIVE_DEST" "$UNGIT_INDEX" > "$idx"; then
-        cp -f "$UNGIT_INDEX" "$idx"
-      fi
+      grep -v "^$RELATIVE_DEST" "$UNGIT_INDEX" > "$idx" || true
     fi
+
+    # Add the reference to the (new?) repository snapshot, if relevant
     if [ -n "${1:-}" ]; then
       printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
-      verbose "Updating index ${UNGIT_INDEX}: $RELATIVE_DEST -> $1"
+      verbose "Updated index ${UNGIT_INDEX}: $RELATIVE_DEST -> $1"
     else
-      verbose "Removing index entry ${UNGIT_INDEX}: $RELATIVE_DEST"
+      verbose "Removed index entry ${UNGIT_INDEX}: $RELATIVE_DEST"
     fi
     mv -f "$idx" "$UNGIT_INDEX"
   fi
