@@ -192,12 +192,20 @@ download_github_archive() {
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].]+)/~https://api.\1/repos/~')
     download_gz "${DW_ROOT%/}/tarball/${REPO_REF}" "${1:-}" --header "Authorization: Bearer $UNGIT_TOKEN"
   else
-    # Consider the reference to be a banch name first, then a tag name, then a
-    # commit hash. Note: does not perform any check on the validity of the
-    # reference. This could be done for commit references.
-    download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
-      download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
+    # Check if the reference is a fully-formed reference, i.e. starts with
+    # refs/. When it is, download deterministically. Otherwise, try to download
+    # from the various possible locations.
+    if printf %s\\n "$REPO_REF" | grep -q '^refs/'; then
       download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
+    else
+      # Consider the reference to be a banch name first, then a tag name, then a
+      # pull request, then a commit hash. Note: does not perform any check on
+      # the validity of the reference. This could be done for commit references.
+      download_gz "${REPO_URL%/}/archive/refs/heads/${REPO_REF}.tar.gz" "${1:-}" ||
+        download_gz "${REPO_URL%/}/archive/refs/tags/${REPO_REF}.tar.gz" "${1:-}" ||
+        download_gz "${REPO_URL%/}/archive/refs/pull/${REPO_REF}.tar.gz" "${1:-}" ||
+        download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
+    fi
   fi
 }
 
