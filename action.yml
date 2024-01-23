@@ -48,7 +48,7 @@ runs:
 
         # Decide upon the reference to use
         if [ -z "$UNGIT__REF" ] && [ "$UNGIT__REPOSITORY" = '${{ github.repository}}' ]; then
-          UNGIT__REF=${{ github.ref_name }}
+          UNGIT__REF=${{ github.ref }}
         fi
 
         # Use reference to decide upon the repository specification
@@ -68,5 +68,5 @@ runs:
         "${{ github.action_path }}/ungit.sh" \
           -c '' \
           -f \
-          -v \
+          -vv \
           add "$repo" "$target"
