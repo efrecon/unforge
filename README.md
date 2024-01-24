@@ -9,8 +9,8 @@ similar to [actions/checkout], but without the history.
 
 `ungit` can detect that the destination directory belongs to a git repository.
 In that case it will maintain an index of such snapshots in a file called
-`.ungit` at the root of the repository. `ungit` automatically caches tarballs in
-the [XDG] cache to avoid unecessary downloads.
+`.ungit` at the root of the repository, preferrably. `ungit` automatically
+caches tarballs in the [XDG] cache to avoid unecessary downloads.
 
 Read further down for a more detailed list of `ungit`'s [features](#highlights)
 and [limitations](#limitations), or jump straight to the [examples](#examples).
@@ -59,9 +59,11 @@ ungit.sh -t gitlab -v add gitlab-org/gitlab-runner@renovate/golang-1.x
 
 ### Index File
 
-The examples below point explicitely to an index file called `.ungit`. If they
-were called from a directory contained in a git repository, it is possible to
-omit the `-i` option instead, as it is the default.
+Some of the examples below point explicitely to an index file called `.ungit`.
+If they were called from a directory contained in a git repository, it is
+possible to omit the `-i` option instead, as it is the default. By default,
+`ungit` will automatically climb up the hierarchy starting from the destination
+directory to look for the `.ungit` file when adding, installing or deleting.
 
 #### Add a Snapshot
 
@@ -86,20 +88,22 @@ actions/keepalive https://github.com/efrecon/gh-action-keepalive
 ```
 
 Then, when the following command is run, it will add the `ungit` and
-`actions/keepalive` directories under the current directory. Since an index file
-is used, files and directories will be made read-only. This is to enforce
-managing the snapshots using `ungit`, and to prevent their heedless
-modification.
+`actions/keepalive` directories under the current directory. `ungit` will
+automatically climb up the hierarchy in search for the `.ungit` index file that
+you have created. Since an index file is found and used, files and directories
+will be made read-only. This is to enforce managing the snapshots using `ungit`,
+and to prevent their heedless modification.
 
 ```bash
-ungit.sh -i .ungit install
+ungit.sh install
 ```
 
 #### Remove a Snapshot
 
 Building upon the previous example, the following command will remove the
 `ungit` directory from under the current directory and remove the association
-from the index file.
+from the index file. In the example below, specifying the `.ungit` index file is
+redundant.
 
 ```bash
 ungit.sh -i .ungit remove ungit
@@ -178,7 +182,9 @@ implementation script. For an exact list of inputs, consult the
 + Will not overwrite the content of the target directory if it already exists,
   unless the `-f` option is provided.
 + When APIs provide a way to make the difference, the search order for the
-  reference is: branch name, tag name, commit reference.
+  reference is: branch name, tag name, pull request, commit reference.
++ When running against GitHub repositories, you can specify fully qualified
+  references, e.g. starting with `refs/` to bypass the default search order.
 + When `-f`is provided, wipes the content of the target directory, unless the
   `UNGIT_KEEP` variable is set to `1`. Since `ungit` is about obtaining
   snapshots of target repositories, the (good) default prevents mixing several
@@ -190,7 +196,13 @@ implementation script. For an exact list of inputs, consult the
   repositories. When using an index, target directory protection is
   automatically turned on.
 + When run from within a `git` repository, will automatically use a file called
-  `.ungit` at the root of the repository as an index.
+  `.ungit` at the root of the repository as an index when adding the first time
+  -- and unless specified otherwise.
++ `ungit` will automatically climb up the hierarchy starting from the
+  destination directory to look for the `.ungit` index file when adding,
+  installing or deleting. This means that while keeping the `.ungit` index file
+  at the root of the git repository is the preferred way, you are free to choose
+  differently.
 + `ungit` also works with private repositories as long as you can pass an
   authentication token with the `-T` option.
 

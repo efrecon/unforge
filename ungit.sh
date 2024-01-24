@@ -40,9 +40,11 @@ UNGIT_PROTECT=${UNGIT_PROTECT:-"auto"}
 UNGIT_CACHE=${UNGIT_CACHE:-${XDG_CACHE_HOME}/ungit}
 
 # Path to a file containing an index of all the snapshots created and from
-# where. When empty, a file called .ungit will be created under the root of the
-# git repository holding the destination directory, or none. When a dash, no
-# index will be maintained, event in a git repository.
+# where. When empty and installing or adding, the first file called .ungit when
+# climbing up the hierarchy will be used, if found. When empty and adding for
+# the first time, a file called .ungit will be created under the root of the git
+# repository holding the destination directory. When a dash, no index will be
+# maintained, even in a git repository.
 UNGIT_INDEX=${UNGIT_INDEX:-}
 
 # Number of directories to look up for the .git directory. Set to -1 for no
@@ -91,7 +93,7 @@ while getopts "c:fi:p:r:t:T:vh-" opt; do
       UNGIT_CACHE=$OPTARG;;
     f) # Force overwriting of existing files and directories. Twice to force redownload of tarball even if in cache.
       UNGIT_FORCE=$((UNGIT_FORCE+1));;
-    i) # Set the index file. Defaults to .ungit in the root of the git repository holding the destination directory. Use a dash to disable default.
+    i) # Set the index file. Defaults to .ungit upwards or in the root of the git repository holding the destination directory. Use a dash to disable default.
       UNGIT_INDEX=$OPTARG;;
     p) # Protect target directory and files from being changed by making them read-only. Boolean or "auto" (default) to turn on when index is used.
       UNGIT_PROTECT=$OPTARG;;
@@ -287,27 +289,34 @@ relpath() {
 # mode". Set the $GITROOT variable to the root location of the git repository
 # this is called from and adapt the UNGIT_INDEX if none was specified.
 # WARNING: This touches: GITROOT, UNGIT_INDEX, UNGIT_PROTECT->boolean
-git_detect() {
-  GITDIR=$(climb_and_find .git "$1" | head -n 1)
-  if [ -z "$GITDIR" ]; then
-    trace "Could not find a .git directory in $1"
-    GITROOT=""
-  else
-    GITROOT=$(dirname "$GITDIR")
-  fi
-
+index_detect() {
   # When none specified, set index as being a file called .ungit in the root of
   # the git repository.
   if [ "$UNGIT_INDEX" = "-" ]; then
     verbose "Indexing disabled"
     UNGIT_INDEX=""; # Switch off index completely.
-  elif [ -z "$UNGIT_INDEX" ] && [ -n "$GITROOT" ]; then
-    UNGIT_INDEX=${GITROOT}/.ungit
-    verbose "Using $UNGIT_INDEX as index file"
+  elif [ -z "$UNGIT_INDEX" ]; then
+    UNGIT_INDEX=$(climb_and_find .ungit "$1" | head -n 1)
+    if [ -n "$UNGIT_INDEX" ]; then
+      verbose "Using $UNGIT_INDEX as index file"
+    else
+      GITDIR=$(climb_and_find .git "$1" | head -n 1)
+      if [ -z "$GITDIR" ]; then
+        verbose "Could not find a .git directory in $1"
+        GITROOT=""
+      else
+        GITROOT=$(dirname "$GITDIR")
+      fi
+
+      if [ -n "$GITROOT" ]; then
+        UNGIT_INDEX=${GITROOT}/.ungit
+        verbose "Using $UNGIT_INDEX as index file"
+      fi
+    fi
   fi
 
-  # Automatically turn target directory protection when applicable. Down from here
-  # UNGIT_PROTECT can always be understood as a boolean.
+  # Automatically turn target directory protection when applicable. Down from
+  # here UNGIT_PROTECT can always be understood as a boolean.
   if [ "$UNGIT_PROTECT" = "auto" ]; then
     if [ -n "$UNGIT_INDEX" ]; then
       verbose "Turning on target directory protection"
@@ -323,13 +332,13 @@ charcount() {
   printf %s\\n "$1" | grep -Fo "$2" | wc -l
 }
 
-protect() {
+tree_protect() {
   if is_true "$UNGIT_PROTECT"; then
     chmod -R a-w "$1"
     debug "Hierarchically made $1 read-only"
   fi
 }
-unprotect() {
+tree_unprotect() {
   if is_true "$UNGIT_PROTECT"; then
     chmod -R u+w "$1"
     debug "Hierarchically allowed user access to $1"
@@ -338,7 +347,7 @@ unprotect() {
 
 # Provided DESTDIR is a snapshot directory, update the index file to: add the
 # repository it points to with $1, or remove it if no argument is provided
-update_index() {
+index_update() {
   if [ -n "$UNGIT_INDEX" ]; then
     INDEX_DIR=$(dirname "$UNGIT_INDEX")
     RELATIVE_DEST=$(relpath "$INDEX_DIR" "$DESTDIR")
@@ -362,7 +371,7 @@ update_index() {
 
 cmd_install() {
   # Detect the git repository root and the index file
-  git_detect "$(pwd)"
+  index_detect "$(pwd)"
   if [ -n "$UNGIT_INDEX" ] && [ -f "$UNGIT_INDEX" ]; then
     # Copy the current index to a temporary file, as adding stuff might rewrite
     # to it otherwise.
@@ -460,7 +469,7 @@ cmd_add() {
   fi
 
   # Lookup for a .git directory to be able to turn on "git mode"
-  git_detect "$(dirname "$DESTDIR")"
+  index_detect "$(dirname "$DESTDIR")"
 
   # Decide the repository type when none is specified, detect from the URL
   if [ -z "$UNGIT_TYPE" ]; then
@@ -503,11 +512,11 @@ cmd_add() {
   if [ -d "$DESTDIR" ]; then
     if [ "$UNGIT_FORCE" -ge 1 ]; then
       verbose "Removing all content from directory ${DESTDIR}"
-      unprotect "$DESTDIR"
+      tree_unprotect "$DESTDIR"
       rm -rf "$DESTDIR"
     elif is_true "$UNGIT_KEEP"; then
       verbose "Current directory content under ${DESTDIR} kept as-is"
-      unprotect "$DESTDIR"
+      tree_unprotect "$DESTDIR"
     else
       error "Destination directory ${DESTDIR} already exists. Use -f to overwrite"
     fi
@@ -515,7 +524,7 @@ cmd_add() {
   mkdir -p "${DESTDIR}"
   tar -C "${tardir}" -cf - . | tar -C "${DESTDIR}" -xf -
   verbose "Copied snapshot of ${REPO_URL}@${REPO_REF} to ${DESTDIR}"
-  protect "$DESTDIR"
+  tree_protect "$DESTDIR"
 
   # Keep a copy of the tarball in the cache directory if one is specified.
   if [ -n "$UNGIT_CACHE" ]; then
@@ -524,7 +533,7 @@ cmd_add() {
   fi
 
   # Maintain an index of all the snapshots created and from where.
-  update_index "$REPO_URL"
+  index_update "$REPO_URL"
 
   # Cleanup.
   rm -rf "$dwdir" "$tardir"
@@ -534,10 +543,10 @@ cmd_add() {
 cmd_delete() {
   DESTDIR=$1;  # Make sure it is set
   if  [ -d "$DESTDIR" ]; then
-    git_detect "$DESTDIR"
-    update_index;  # Will remove the DESTDIR entry from the index
+    index_detect "$DESTDIR"
+    index_update;  # Will remove the DESTDIR entry from the index
     verbose "Removing all content from directory ${DESTDIR}"
-    unprotect "$DESTDIR"
+    tree_unprotect "$DESTDIR"
     rm -rf "$DESTDIR"
   else
     error "Directory ${DESTDIR} does not exist"
