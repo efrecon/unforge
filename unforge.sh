@@ -360,19 +360,30 @@ index_update() {
 
     # Add the reference to the (new?) repository snapshot, if relevant
     if [ -n "${1:-}" ]; then
-      if [ -n "${2:-}" ]; then
-        printf '%s\t%s@%s\n' "$RELATIVE_DEST" "$1" "$2" >> "$idx"
-        verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1@$2"
-      else
-        printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
-        verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1"
-      fi
+      printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
+      verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1"
     else
       verbose "Removed index entry ${UNFORGE_INDEX}: $RELATIVE_DEST"
     fi
     mv -f "$idx" "$UNFORGE_INDEX"
   fi
 }
+
+
+forge_url() {
+  if printf %s\\n "$1" | grep -qE '^https?://(github|gitlab).com/'; then
+    printf %s "$1"
+  else
+    printf %s "$1" | sed -E "s~^(https?)://~\\1\\+${UNFORGE_TYPE}://~"
+  fi
+
+  if [ -n "${2:-}" ] && [ "$2" != "$UNFORGE_DEFAULT_REF" ]; then
+    printf @%s\\n "$2"
+  else
+    printf \\n
+  fi
+}
+
 
 cmd_install() {
   # Detect the git repository root and the index file
@@ -434,7 +445,10 @@ cmd_add() {
   # If the first argument is a URL, use it as is, otherwise construct the full URL
   # using the UNFORGE_TYPE variable, i.e. the type of the forge (github, gitlab,
   # etc.)
-  if printf %s\\n "$1" | grep -qE '^https?://'; then
+  if printf %s\\n "$1" | grep -qE '^https?\+[a-z]+://'; then
+    UNFORGE_TYPE=$(printf %s\\n "$1" | grep -oE '^https?\+[a-z]+://' | grep -oE '\+[a-z]+' | cut -c 2-)
+    REPO_URL=$(printf %s\\n "$1" | sed -E 's~^(https?)\+[a-z]+(://)~\1\2~')
+  elif printf %s\\n "$1" | grep -qE '^https?://'; then
     REPO_URL=$1
   else
     if [ "$(charcount "$1" '/')" -ge 1 ]; then
@@ -538,7 +552,7 @@ cmd_add() {
   fi
 
   # Maintain an index of all the snapshots created and from where.
-  index_update "$REPO_URL" "$REPO_REF"
+  index_update "$(forge_url "$REPO_URL" "$REPO_REF")"
 
   # Cleanup.
   rm -rf "$dwdir" "$tardir"
