@@ -1,5 +1,5 @@
 ---
-  name: ungit
+  name: unforge
 
   on:
     push:
@@ -15,21 +15,21 @@
     cancel-in-progress: true
 
   jobs:
-    ungit:
+    unforge:
       runs-on: ubuntu-latest
-      name: ungit
+      name: unforge
       steps:
         - name: Checkout
           uses: actions/checkout@v4
           with:
             fetch-depth: 0
-        - name: ungit
+        - name: unforge
           uses: ./
           env:
-            UNGIT_INDEX: "-"
+            UNFORGE_INDEX: "-"
           with:
-            path: __ungit__
+            path: __unforge__
         - name: result
           shell: bash
           run: |
-            ls -lRh __ungit__
+            ls -lRh __unforge__

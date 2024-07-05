@@ -1,19 +1,20 @@
-# ungit
+# unforge
 
 Fetch the content of a forge's repository at a given reference into a local
-directory. [`ungit`](./ungit.sh) uses the various forge APIs, thus entirely
+directory. [`unforge`](./unforge.sh) uses the various forge APIs, thus entirely
 bypasses `git`. You will get a snapshot of the repository at that reference,
 with no history. In most cases, this is [quicker](#speed) than cloning the
-repository. `ungit` also implements a GitHub action, with a behaviour and inputs
-similar to [actions/checkout], but without the history.
+repository. `unforge` also implements a GitHub action, with a behaviour and
+inputs similar to [actions/checkout], but without the history.
 
-`ungit` can detect that the destination directory belongs to a git repository.
+`unforge` can detect that the destination directory belongs to a git repository.
 In that case it will maintain an index of such snapshots in a file called
-`.ungit` at the root of the repository, preferrably. `ungit` automatically
+`.unforge` at the root of the repository, preferrably. `unforge` automatically
 caches tarballs in the [XDG] cache to avoid unecessary downloads.
 
-Read further down for a more detailed list of `ungit`'s [features](#highlights)
-and [limitations](#limitations), or jump straight to the [examples](#examples).
+Read further down for a more detailed list of `unforge`'s
+[features](#highlights) and [limitations](#limitations), or jump straight to the
+[examples](#examples).
 
   [actions/checkout]: https://github.com/actions/checkout
 
@@ -23,28 +24,28 @@ and [limitations](#limitations), or jump straight to the [examples](#examples).
 
 #### Fetch from `main` branch at GitHub
 
-Provided `ungit.sh` is in your `$PATH`, the following command will download the
-latest content of this repository (`main` branch) into a directory called
-`ungit` under the current directory.
+Provided `unforge.sh` is in your `$PATH`, the following command will download
+the latest content of this repository (`main` branch) into a directory called
+`unforge` under the current directory.
 
 ```bash
-ungit.sh add efrecon/ungit
+unforge.sh add efrecon/unforge
 ```
 
 The `add` command is optional, this means that the command below is similar:
 
 ```bash
-ungit.sh efrecon/ungit
+unforge.sh efrecon/unforge
 ```
 
 #### Specify a branch/tag/reference
 
 The following command will download the first version ever committed to this
-repository to the directory `/tmp/ungit`. The reference can either be a branch
+repository to the directory `/tmp/unforge`. The reference can either be a branch
 name, a tag or, as in the example, a commit reference.
 
 ```bash
-ungit.sh add efrecon/ungit@34bc76507d0e7722811720532587dd6547e8893a /tmp/ungit
+unforge.sh add efrecon/unforge@34bc76507d0e7722811720532587dd6547e8893a /tmp/unforge
 ```
 
 #### Download from GitLab
@@ -54,59 +55,60 @@ GitLab Runner project. Verbosity feedback is provided, increase the number of
 `v`s for even more details.
 
 ```bash
-ungit.sh -t gitlab -v add gitlab-org/gitlab-runner@renovate/golang-1.x
+unforge.sh -t gitlab -v add gitlab-org/gitlab-runner@renovate/golang-1.x
 ```
 
 ### Index File
 
-Some of the examples below point explicitely to an index file called `.ungit`.
+Some of the examples below point explicitly to an index file called `.unforge`.
 If they were called from a directory contained in a git repository, it is
 possible to omit the `-i` option instead, as it is the default. By default,
-`ungit` will automatically climb up the hierarchy starting from the destination
-directory to look for the `.ungit` file when adding, installing or deleting.
+`unforge` will automatically climb up the hierarchy starting from the
+destination directory to look for the `.unforge` file when adding, installing or
+deleting.
 
 #### Add a Snapshot
 
 The following command will download the latest content of this repository
-(`main` branch) into a directory called `ungit` under the current directory. It
-will update the index file called `.ungit` in the current directory to remember
-this association.
+(`main` branch) into a directory called `unforge` under the current directory.
+It will update the index file called `.unforge` in the current directory to
+remember this association.
 
 ```bash
-ungit.sh -i .ungit add efrecon/ungit
+unforge.sh -i .unforge add efrecon/unforge
 ```
 
 #### Install Several Snapshots
 
-Edit the `.ungit` file to the following content:
+Edit the `.unforge` file to the following content:
 
 ```text
-ungit https://github.com/efrecon/ungit
+unforge https://github.com/efrecon/unforge
 
 # Add (but rename) the gh-action-keepalive project
 actions/keepalive https://github.com/efrecon/gh-action-keepalive
 ```
 
-Then, when the following command is run, it will add the `ungit` and
-`actions/keepalive` directories under the current directory. `ungit` will
-automatically climb up the hierarchy in search for the `.ungit` index file that
-you have created. Since an index file is found and used, files and directories
-will be made read-only. This is to enforce managing the snapshots using `ungit`,
-and to prevent their heedless modification.
+Then, when the following command is run, it will add the `unforge` and
+`actions/keepalive` directories under the current directory. `unforge` will
+automatically climb up the hierarchy in search for the `.unforge` index file
+that you have created. Since an index file is found and used, files and
+directories will be made read-only. This is to enforce managing the snapshots
+using `unforge`, and to prevent their heedless modification.
 
 ```bash
-ungit.sh install
+unforge.sh install
 ```
 
 #### Remove a Snapshot
 
 Building upon the previous example, the following command will remove the
-`ungit` directory from under the current directory and remove the association
-from the index file. In the example below, specifying the `.ungit` index file is
-redundant.
+`unforge` directory from under the current directory and remove the association
+from the index file. In the example below, specifying the `.unforge` index file
+is redundant.
 
 ```bash
-ungit.sh -i .ungit remove ungit
+unforge.sh -i .unforge remove unforge
 ```
 
 ### As a GitHub Action
@@ -117,18 +119,18 @@ Checkout the current project at the current reference, in the current workspace
 at the runner.
 
 ```yaml
-- uses: efrecon/ungit
+- uses: efrecon/unforge
 ```
 
 #### Checkout Another Project
 
-Checkout the `efrecon/ungit` project, at a given reference in the current
+Checkout the `efrecon/unforge` project, at a given reference in the current
 workspace at the runner.
 
 ```yaml
-- uses: efrecon/ungit
+- uses: efrecon/unforge
   with:
-    repository: efrecon/ungit
+    repository: efrecon/unforge
     ref: 34bc76507d0e7722811720532587dd6547e8893a
 ```
 
@@ -136,18 +138,18 @@ workspace at the runner.
 
 ### Script
 
-The behaviour of [`ungit`](./ungit.sh) is controlled by a series of environment
-variables -- all starting with `UNGIT_` -- and by its command-line (short)
-options. Options have precedence over environment variables. The first argument
-to `ungit` is a command, and this command defaults to `add`. Provided `ungit.sh`
-is in your `$PATH`, run the following command to get help over both the
-variables, the CLI options and commands.
+The behaviour of [`unforge`](./unforge.sh) is controlled by a series of
+environment variables -- all starting with `unforge_` -- and by its command-line
+(short) options. Options have precedence over environment variables. The first
+argument to `unforge` is a command, and this command defaults to `add`. Provided
+`unforge.sh` is in your `$PATH`, run the following command to get help over both
+the variables, the CLI options and commands.
 
 ```bash
-ungit.sh -h
+unforge.sh -h
 ```
 
-`ungit` recognises the following commands as its first argument, after its
+`unforge` recognises the following commands as its first argument, after its
 options:
 
 + `add`: Add a snapshot of the repository passed as a first argument to the
@@ -167,7 +169,7 @@ and will be able to download content as long as `curl` (preferred) or `wget`
 ### GitHub Action
 
 The GitHub Action uses inputs named after the ones of [actions/checkout]. It is
-a composite action that interfaces almost 1-1 the [`ungit`](./ungit.sh)
+a composite action that interfaces almost 1-1 the [`unforge`](./unforge.sh)
 implementation script. For an exact list of inputs, consult the
 [action](./action.yml).
 
@@ -176,7 +178,7 @@ implementation script. For an exact list of inputs, consult the
 + Takes either the full URL to a repository, or its owner/name as a first
   parameter. When only an owner/name is provided, the URL is constructed out of
   the value of the `-t` option -- `github` by default.
-+ Keeps a cache of downloaded tarballs under a directory called `ungit` in the
++ Keeps a cache of downloaded tarballs under a directory called `unforge` in the
   [XDG] cache directory. Cached tarballs are reused if possible, unless the
   `-ff` option is provided (yes: twice the `-f` option!).
 + Will not overwrite the content of the target directory if it already exists,
@@ -186,7 +188,7 @@ implementation script. For an exact list of inputs, consult the
 + When running against GitHub repositories, you can specify fully qualified
   references, e.g. starting with `refs/` to bypass the default search order.
 + When `-f`is provided, wipes the content of the target directory, unless the
-  `UNGIT_KEEP` variable is set to `1`. Since `ungit` is about obtaining
+  `unforge_KEEP` variable is set to `1`. Since `unforge` is about obtaining
   snapshots of target repositories, the (good) default prevents mixing several
   snapshots into the same target directory.
 + `-p` can prevent the target directory to be modified by forcing all files and
@@ -196,14 +198,14 @@ implementation script. For an exact list of inputs, consult the
   repositories. When using an index, target directory protection is
   automatically turned on.
 + When run from within a `git` repository, will automatically use a file called
-  `.ungit` at the root of the repository as an index when adding the first time
+  `.unforge` at the root of the repository as an index when adding the first time
   -- and unless specified otherwise.
-+ `ungit` will automatically climb up the hierarchy starting from the
-  destination directory to look for the `.ungit` index file when adding,
-  installing or deleting. This means that while keeping the `.ungit` index file
-  at the root of the git repository is the preferred way, you are free to choose
-  differently.
-+ `ungit` also works with private repositories as long as you can pass an
++ `unforge` will automatically climb up the hierarchy starting from the
+  destination directory to look for the `.unforge` index file when adding,
+  installing or deleting. This means that while keeping the `.unforge` index
+  file at the root of the git repository is the preferred way, you are free to
+  choose differently.
++ `unforge` also works with private repositories as long as you can pass an
   authentication token with the `-T` option.
 
   [XDG]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
@@ -222,7 +224,7 @@ There are a number of scenarios where this can be useful:
   comfort of your favorite editor.
 + When you want to use neither [submodules], nor [subtree], but still want to
   use (and maintain over time) another project's tree within yours.
-+ `ungit` implements a rudimentary package manager.
++ `unforge` implements a rudimentary package manager.
 + It was fun to write and only took a few hours.
 
   [submodules]: https://git-scm.com/book/en/v2/Git-Tools-Submodules
@@ -230,7 +232,7 @@ There are a number of scenarios where this can be useful:
 
 ## Speed
 
-On a large repository, `ungit` is likely to be quicker because all `git`
+On a large repository, `unforge` is likely to be quicker because all `git`
 operations are run within the remote's forge infrastructure (and file systems).
 For example, the following timed `git` command:
 
@@ -246,10 +248,10 @@ user	0m11.861s
 sys	0m5.095s
 ```
 
-While the following matching command, using `ungit` instead:
+While the following matching command, using `unforge` instead:
 
 ```bash
-time ungit.sh tensorflow/tensorflow@v2.13.1
+time unforge.sh tensorflow/tensorflow@v2.13.1
 ```
 
 will output:
