@@ -1,4 +1,4 @@
-name: ungit
+name: unforge
 description: >
   Download a branch, tag or commit from a git repository and extract it to a
   directory, without `git`. When you do not need history, this is quicker than
@@ -10,7 +10,7 @@ branding:
 
 inputs:
   repository:
-    description: 'Repository name with owner. For example, `efrecon/ungit`.'
+    description: 'Repository name with owner. For example, `efrecon/unforge`.'
     default: ${{ github.repository }}
   ref:
     description: >
@@ -38,34 +38,34 @@ runs:
       # Pass the inputs to the action as environment variables. More secure:
       # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
       env:
-        UNGIT_TOKEN: ${{ inputs.token }}
-        UNGIT_TYPE: ${{ inputs.type }}
-        UNGIT__REF: ${{ inputs.ref }}
-        UNGIT__REPOSITORY: ${{ inputs.repository }}
-        UNGIT__PATH: ${{ inputs.path }}
+        UNFORGE_TOKEN: ${{ inputs.token }}
+        UNFORGE_TYPE: ${{ inputs.type }}
+        UNFORGE__REF: ${{ inputs.ref }}
+        UNFORGE__REPOSITORY: ${{ inputs.repository }}
+        UNFORGE__PATH: ${{ inputs.path }}
       run: |
         set -eu;  # Exit on error or undefined variable
 
         # Decide upon the reference to use
-        if [ -z "$UNGIT__REF" ] && [ "$UNGIT__REPOSITORY" = '${{ github.repository}}' ]; then
-          UNGIT__REF=${{ github.ref }}
+        if [ -z "$UNFORGE__REF" ] && [ "$UNFORGE__REPOSITORY" = '${{ github.repository}}' ]; then
+          UNFORGE__REF=${{ github.ref }}
         fi
 
         # Use reference to decide upon the repository specification
-        if [ -z "$UNGIT__REF" ]; then
-          repo=$UNGIT__REPOSITORY
+        if [ -z "$UNFORGE__REF" ]; then
+          repo=$UNFORGE__REPOSITORY
         else
-          repo=${UNGIT__REPOSITORY}@${UNGIT__REF}
+          repo=${UNFORGE__REPOSITORY}@${UNFORGE__REF}
         fi
 
         # Construct target directory
-        if [ -z "$UNGIT__PATH" ]; then
+        if [ -z "$UNFORGE__PATH" ]; then
           target=${GITHUB_WORKSPACE%/}
         else
-          target="${GITHUB_WORKSPACE%/}/${UNGIT__PATH}"
+          target="${GITHUB_WORKSPACE%/}/${UNFORGE__PATH}"
         fi
 
-        "${{ github.action_path }}/ungit.sh" \
+        "${{ github.action_path }}/unforge.sh" \
           -c '' \
           -f \
           -vv \
