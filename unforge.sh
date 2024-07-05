@@ -360,8 +360,13 @@ index_update() {
 
     # Add the reference to the (new?) repository snapshot, if relevant
     if [ -n "${1:-}" ]; then
-      printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
-      verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1"
+      if [ -n "${2:-}" ]; then
+        printf '%s\t%s@%s\n' "$RELATIVE_DEST" "$1" "$2" >> "$idx"
+        verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1@$2"
+      else
+        printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
+        verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1"
+      fi
     else
       verbose "Removed index entry ${UNFORGE_INDEX}: $RELATIVE_DEST"
     fi
@@ -533,7 +538,7 @@ cmd_add() {
   fi
 
   # Maintain an index of all the snapshots created and from where.
-  index_update "$REPO_URL"
+  index_update "$REPO_URL" "$REPO_REF"
 
   # Cleanup.
   rm -rf "$dwdir" "$tardir"
