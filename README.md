@@ -9,8 +9,8 @@ inputs similar to [actions/checkout], but without the history.
 
 `unforge` can detect that the destination directory belongs to a git repository.
 In that case it will maintain an index of such snapshots in a file called
-`.unforge` at the root of the repository, preferrably. `unforge` automatically
-caches tarballs in the [XDG] cache to avoid unecessary downloads.
+`.unforge` at the root of the repository, preferably. `unforge` automatically
+caches tarballs in the [XDG] cache to avoid unnecessary downloads.
 
 Read further down for a more detailed list of `unforge`'s
 [features](#highlights) and [limitations](#limitations), or jump straight to the
@@ -207,6 +207,9 @@ implementation script. For an exact list of inputs, consult the
   choose differently.
 + `unforge` also works with private repositories as long as you can pass an
   authentication token with the `-T` option.
++ `unforge` can work with local installations of github or gitlab, through
+  specifying their type as part of the URL scheme, e.g.
+  `https+github://myhost.com/` or `https+gitlab://myhost.com/`.
 
   [XDG]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
