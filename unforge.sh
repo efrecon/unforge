@@ -20,8 +20,8 @@ UNFORGE_VERBOSE=${UNFORGE_VERBOSE:-0}
 # github.
 UNFORGE_TYPE=${UNFORGE_TYPE:-}
 
-# Default reference to use when none is specified.
-UNFORGE_DEFAULT_REF=${UNFORGE_DEFAULT_REF:-"main"}
+# Default reference to use when none is specified. Empty (default)
+UNFORGE_DEFAULT_REF=${UNFORGE_DEFAULT_REF:-""}
 
 # Branches for which we resolve to current reference when in git mode
 UNFORGE_GIT_RESOLVE=${UNFORGE_GIT_RESOLVE:-"$UNFORGE_DEFAULT_REF master"}
@@ -173,6 +173,12 @@ download() {
   fi
 }
 
+json_string_value() {
+  grep -sEo "\"$1\"\\s*:\\s*\"[^\"]+\"" |
+    grep -sEo -e '"[^"]+"$' |
+    sed -e 's/^"//' -e 's/"$//'
+}
+
 # Call download as per the argument and verify that the downloaded file is a
 # gzip file. If not, remove it. Return an error unless there is a (downloaded)
 # gzip file.
@@ -189,6 +195,20 @@ download_gz() {
   fi
 }
 
+default_github_branch() {
+  if [ -n "$UNFORGE_TOKEN" ]; then
+    # Add api. in front of the domain name and /repos/ in the path
+    DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].]+)/~https://api.\1/repos/~')
+    curl -sSL "${DW_ROOT%/}/branches" --header "Authorization: Bearer $UNFORGE_TOKEN" |
+      json_string_value "name" |
+      head -n 1
+  else
+    curl -sSL "${REPO_URL%/}/branches" |
+      json_string_value "name" |
+      head -n 1
+  fi
+}
+
 resolve_github_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
     # Add api. in front of the domain name and /repos/ in the path
@@ -196,7 +216,7 @@ resolve_github_branch() {
     curl -sSL "${DW_ROOT%/}/commits?sha=${REPO_REF}" --header "Authorization: Bearer $UNFORGE_TOKEN" |
       grep -sEo 'commits/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
-      head -n 1 ||true
+      head -n 1
   else
     curl -sSL "${REPO_URL%/}/commits/${REPO_REF}/" |
       grep -sEo 'commit/[0-9a-f]{40}' |
@@ -233,6 +253,7 @@ download_github_archive() {
   fi
 }
 
+
 resolve_gitlab_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
     # Extract the repository name from the URL and the root of the domain.
@@ -241,12 +262,12 @@ resolve_gitlab_branch() {
     curl -sSL "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")/repository/commits?ref_name=${REPO_REF}" --header "PRIVATE-TOKEN: $UNFORGE_TOKEN" |
       grep -sEo 'commit/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
-      head -n 1 ||true
+      head -n 1
   else
     curl -sSL "${REPO_URL%/}/-/commits/${REPO_REF}/" |
       grep -sEo 'tree/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
-      head -n 1 ||true
+      head -n 1
   fi
 }
 
@@ -516,10 +537,29 @@ cmd_add() {
   fi
   shift
 
+  # Decide the repository type when none is specified, detect from the URL.
+  # Enforce the ones we recognise.
+  if [ -z "$UNFORGE_TYPE" ]; then
+    if printf %s\\n "$REPO_URL" | grep -q 'github\.com'; then
+      UNFORGE_TYPE=github
+    elif printf %s\\n "$REPO_URL" | grep -q 'gitlab\.com'; then
+      UNFORGE_TYPE=gitlab
+    else
+      error "Unsupported repository type: $REPO_URL"
+    fi
+  elif ! printf %s\\n "$UNFORGE_TYPE" | grep -qE 'git(hub|lab)'; then
+    error "Unsupported repository type: $UNFORGE_TYPE"
+  fi
+
   # Extract the tag, branch or commit reference as being everything after the @
   REPO_REF=$(printf %s\\n "$REPO_URL" | grep -oE '@.*$' | cut -c 2-)
   if [ -z "$REPO_REF" ]; then
-    REPO_REF=$UNFORGE_DEFAULT_REF
+    if [ -z "$UNFORGE_DEFAULT_REF" ]; then
+      debug "Detecting default branch for $REPO_URL"
+      REPO_REF=$(default_${UNFORGE_TYPE}_branch)
+      verbose "Detected default branch of $REPO_URL to be: $REPO_REF"
+      UNFORGE_DEFAULT_REF=$REPO_REF
+    fi
   else
     REPO_URL=$(printf %s\\n "$REPO_URL" | sed 's/@.*$//')
   fi
@@ -536,29 +576,17 @@ cmd_add() {
   # Lookup for a .git directory to be able to turn on "git mode"
   index_detect "$(dirname "$DESTDIR")"
 
-  # Decide the repository type when none is specified, detect from the URL.
-  # Enforce the ones we recognise.
-  if [ -z "$UNFORGE_TYPE" ]; then
-    if printf %s\\n "$REPO_URL" | grep -q 'github\.com'; then
-      UNFORGE_TYPE=github
-    elif printf %s\\n "$REPO_URL" | grep -q 'gitlab\.com'; then
-      UNFORGE_TYPE=gitlab
-    else
-      error "Unsupported repository type: $REPO_URL"
-    fi
-  elif ! printf %s\\n "$UNFORGE_TYPE" | grep -qE 'git(hub|lab)'; then
-    error "Unsupported repository type: $UNFORGE_TYPE"
-  fi
-
   # When inside a git repo, if branch is main, resolve it to its current
   # reference.
   if [ -n "$UNFORGE_INDEX" ]; then
     if printf %s\\n "$UNFORGE_INDEX" | grep -Fq "$GITROOT"; then
       if printf %s\\n "$UNFORGE_GIT_RESOLVE" | grep -Fq "$REPO_REF"; then
+        debug "Resolving $REPO_REF branch at $UNFORGE_TYPE"
         ref=$(resolve_${UNFORGE_TYPE}_branch "$REPO_REF")
         if [ -z "$ref" ]; then
           warning "Could not resolve $REPO_REF to current commit at $REPO_URL"
         else
+          verbose "Pinpointed ($UNFORGE_TYPE) $REPO_REF to $ref"
           REPO_REF=$ref
         fi
       fi
