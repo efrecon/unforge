@@ -200,6 +200,12 @@ implementation script. For an exact list of inputs, consult the
 + When run from within a `git` repository, will automatically use a file called
   `.unforge` at the root of the repository as an index when adding the first time
   -- and unless specified otherwise.
++ When run from within a `git` repository, the `main` and `master` branches will
+  be resolved to their current reference in the `.unforge` index. This freezes
+  the imported code at the current moment in time and avoids problems when
+  updating later. The list of branches to resolve can be changed through the
+  option `-r`. 
++ Automatically detects the default branch of github and gitlab projects.
 + `unforge` will automatically climb up the hierarchy starting from the
   destination directory to look for the `.unforge` index file when adding,
   installing or deleting. This means that while keeping the `.unforge` index
