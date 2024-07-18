@@ -24,7 +24,7 @@ UNFORGE_TYPE=${UNFORGE_TYPE:-}
 UNFORGE_DEFAULT_REF=${UNFORGE_DEFAULT_REF:-""}
 
 # Branches for which we resolve to current reference when in git mode
-UNFORGE_GIT_RESOLVE=${UNFORGE_GIT_RESOLVE:-"$UNFORGE_DEFAULT_REF master"}
+UNFORGE_GIT_RESOLVE=${UNFORGE_GIT_RESOLVE:-"main master"}
 
 # When >=1 Force overwriting of existing files and directories, when >=2 force
 # redownload of tarball even if in cache.
@@ -100,8 +100,8 @@ while getopts "c:fi:p:r:t:T:vh-" opt; do
       UNFORGE_INDEX=$OPTARG;;
     p) # Protect target directory and files from being changed by making them read-only. Boolean or "auto" (default) to turn on when index is used.
       UNFORGE_PROTECT=$OPTARG;;
-    r) # Set the default reference, main by default
-      UNFORGE_DEFAULT_REF=$OPTARG;;
+    r) # Branches resolved to current reference when in git mode. Default to main and master.
+      UNFORGE_GIT_RESOLVE=$OPTARG;;
     t) # Force the repository type (github or gitlab), empty to autodetect from URL. Defaults to github
       UNFORGE_TYPE=$OPTARG;;
     T) # Set the authentication token to use with the forge
@@ -173,10 +173,11 @@ download() {
   fi
 }
 
+unquote() { sed -e 's/^"//' -e 's/"$//'; }
+quoted_string_eol() { grep -sEo -e '"[^"]+"$'; }
+
 json_string_value() {
-  grep -sEo "\"$1\"\\s*:\\s*\"[^\"]+\"" |
-    grep -sEo -e '"[^"]+"$' |
-    sed -e 's/^"//' -e 's/"$//'
+  grep -sEo "\"$1\"\\s*:\\s*\"[^\"]+\"" | quoted_string_eol | unquote
 }
 
 # Call download as per the argument and verify that the downloaded file is a
@@ -250,6 +251,24 @@ download_github_archive() {
         download_gz "${REPO_URL%/}/archive/refs/pull/${REPO_REF}.tar.gz" "${1:-}" ||
         download_gz "${REPO_URL%/}/archive/${REPO_REF}.tar.gz" "${1:-}"
     fi
+  fi
+}
+
+default_gitlab_branch() {
+  if [ -n "$UNFORGE_TOKEN" ]; then
+    ### TODO: fix this against API doc
+    # Extract the repository name from the URL and the root of the domain.
+    _repo=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~\2~')
+    DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~https://\1/~')
+    curl -sSL "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")" --header "Authorization: Bearer $UNFORGE_TOKEN" |
+      json_string_value "default_branch" |
+      head -n 1
+  else
+    curl -sSL "${REPO_URL%/}/-/branches" |
+      grep -Eo 'default-branch-name\s*=\s*"[^"]+"' |
+      quoted_string_eol |
+      unquote |
+      head -n 1
   fi
 }
 
@@ -558,7 +577,7 @@ cmd_add() {
       debug "Detecting default branch for $REPO_URL"
       REPO_REF=$(default_${UNFORGE_TYPE}_branch)
       verbose "Detected default branch of $REPO_URL to be: $REPO_REF"
-      UNFORGE_DEFAULT_REF=$REPO_REF
+      UNFORGE_DEFAULT_REF=$REPO_REF; # Also remember for clean index output
     fi
   else
     REPO_URL=$(printf %s\\n "$REPO_URL" | sed 's/@.*$//')
