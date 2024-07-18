@@ -68,5 +68,6 @@ runs:
         "${{ github.action_path }}/unforge.sh" \
           -c '' \
           -f \
+          -i '-' \
           -vv \
           add "$repo" "$target"
