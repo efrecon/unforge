@@ -173,12 +173,10 @@ download() {
   fi
 }
 
+# Understandable string operations...
 unquote() { sed -e 's/^"//' -e 's/"$//'; }
 quoted_string_eol() { grep -sEo -e '"[^"]+"$'; }
-
-json_string_value() {
-  grep -sEo "\"$1\"\\s*:\\s*\"[^\"]+\"" | quoted_string_eol | unquote
-}
+json_string_value() { grep -sEo "\"$1\"\\s*:\\s*\"[^\"]+\"" | quoted_string_eol | unquote; }
 
 # Call download as per the argument and verify that the downloaded file is a
 # gzip file. If not, remove it. Return an error unless there is a (downloaded)
@@ -196,6 +194,7 @@ download_gz() {
   fi
 }
 
+
 default_github_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
     # Add api. in front of the domain name and /repos/ in the path
@@ -209,6 +208,7 @@ default_github_branch() {
       head -n 1
   fi
 }
+
 
 resolve_github_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
@@ -254,9 +254,9 @@ download_github_archive() {
   fi
 }
 
+
 default_gitlab_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
-    ### TODO: fix this against API doc
     # Extract the repository name from the URL and the root of the domain.
     _repo=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~\2~')
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~https://\1/~')
