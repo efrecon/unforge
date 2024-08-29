@@ -153,9 +153,11 @@ unforge.sh -h
 options:
 
 + `add`: Add a snapshot of the repository passed as a first argument to the
-  directory passed as a second argument (optional). When an index file is to be
-  maintained, it will remember the association. The index file will contain a
-  relative reference to the destination directory.
+  directory passed as a second argument (optional). If a third argument is
+  provided, it should be a sub-directory of the remote directory to extract from
+  (instead of, otherwise, the root). When an index file is to be maintained, it
+  will remember the association. The index file will contain a relative
+  reference to the destination directory.
 + `delete` (or `remove`): Remove the directory passed as an argument. When an
   index file is to be maintained, the association will be lost.
 + `install`: Install snapshots of all repositories pointed out by the index

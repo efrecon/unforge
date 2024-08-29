@@ -446,8 +446,13 @@ index_update() {
 
     # Add the reference to the (new?) repository snapshot, if relevant
     if [ -n "${1:-}" ]; then
-      printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
-      verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST -> $1"
+      if [ -n "${2:-}" ]; then
+        printf '%s\t%s\t%s\n' "$RELATIVE_DEST" "$1" "$2" >> "$idx"
+        verbose "Updated index ${UNFORGE_INDEX}: ${RELATIVE_DEST}/$2 <- $1"
+      else
+        printf '%s\t%s\n' "$RELATIVE_DEST" "$1" >> "$idx"
+        verbose "Updated index ${UNFORGE_INDEX}: $RELATIVE_DEST <- $1"
+      fi
     else
       verbose "Removed index entry ${UNFORGE_INDEX}: $RELATIVE_DEST"
     fi
@@ -500,6 +505,7 @@ EOF
         # Read the destination directory and the repository URL from the index.
         DESTDIR=$(printf %s\\n "$line" | awk '{print $1}')
         REPO_URL=$(printf %s\\n "$line" | awk '{print $2}')
+        SUBDIR=$(printf %s\\n "$line" | awk '{print $3}')
         if [ -n "$REPO_URL" ] && [ -n "$DESTDIR" ]; then
           # Compute the full path of the destination directory and call this
           # script again to add the snapshot. Do not replace existing
@@ -507,12 +513,12 @@ EOF
           DESTDIR=${INDEX_DIR}/${DESTDIR}
           if [ -d "$DESTDIR" ]; then
             if [ "$UNFORGE_FORCE" -ge 1 ]; then
-              "$0" add "$REPO_URL" "$DESTDIR"
+              "$0" add "$REPO_URL" "$DESTDIR" "$SUBDIR"
             else
               verbose "Skipping $DESTDIR, already exists. Rerun with at least -f to force"
             fi
           else
-            "$0" add "$REPO_URL" "$DESTDIR"
+            "$0" add "$REPO_URL" "$DESTDIR" "$SUBDIR"
           fi
         fi
       fi
@@ -638,6 +644,17 @@ cmd_add() {
   tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" --strip-component 1 -C "$tardir"
   trace "Extracted ${dwdir}/${REPO_NAME}.tar.gz to $tardir"
 
+  # Decide source directory (inside unpacked tar)
+  if [ -n "${2:-}" ]; then
+    if [ -d "${tardir}/${2#/}" ]; then
+      SRCDIR="${tardir}/${2#/}"
+    else
+      error "Specified sub-directory does not exist inside tar: ${tardir}/${2#/}"
+    fi
+  else
+    SRCDIR=$tardir
+  fi
+
   # Create the destination directory and copy the contents of the tarball to it.
   if [ -d "$DESTDIR" ]; then
     if [ "$UNFORGE_FORCE" -ge 1 ]; then
@@ -652,8 +669,12 @@ cmd_add() {
     fi
   fi
   mkdir -p "${DESTDIR}"
-  tar -C "${tardir}" -cf - . | tar -C "${DESTDIR}" -xf -
-  verbose "Copied snapshot of ${REPO_URL}@${REPO_REF} to ${DESTDIR}"
+  tar -C "$SRCDIR" -cf - . | tar -C "${DESTDIR}" -xf -
+  if [ -n "${2:-}" ]; then
+    verbose "Copied snapshot of ${REPO_URL}@${REPO_REF}/${2#/} to ${DESTDIR}"
+  else
+    verbose "Copied snapshot of ${REPO_URL}@${REPO_REF} to ${DESTDIR}"
+  fi
   tree_protect "$DESTDIR"
 
   # Keep a copy of the tarball in the cache directory if one is specified.
@@ -663,7 +684,11 @@ cmd_add() {
   fi
 
   # Maintain an index of all the snapshots created and from where.
-  index_update "$(forge_url "$REPO_URL" "$REPO_REF")"
+  if [ "$#" -gt 2 ]; then
+    index_update "$(forge_url "$REPO_URL" "$REPO_REF")" "${2#/}"
+  else
+    index_update "$(forge_url "$REPO_URL" "$REPO_REF")"
+  fi
 
   # Cleanup.
   rm -rf "$dwdir" "$tardir"
