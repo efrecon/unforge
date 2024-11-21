@@ -365,6 +365,15 @@ relpath() {
   printf %s\\n "${b}${d#"$s"/}"
 }
 
+index_in_git() {
+  verbose "$UNFORGE_INDEX --  $GITROOT"
+  if [ -n "${UNFORGE_INDEX:-}" ] && [ -n "${GITROOT:-}" ]; then
+    printf %s\\n "$UNFORGE_INDEX" | grep -Fq "$GITROOT"
+  else
+    return 1
+  fi
+}
+
 git_detect() {
   GITROOT=""
   GITDIR=$(climb_and_find .git "$1" | head -n 1)
@@ -405,8 +414,13 @@ index_detect() {
   # here UNFORGE_PROTECT can always be understood as a boolean.
   if [ "$UNFORGE_PROTECT" = "auto" ]; then
     if [ -n "$UNFORGE_INDEX" ]; then
-      verbose "Turning on target directory protection"
-      UNFORGE_PROTECT=1
+      if index_in_git; then
+        verbose "Turning off target directory protection. Index at $UNFORGE_INDEX is under git repository at $GITROOT."
+        UNFORGE_PROTECT=0
+      else
+        verbose "Turning on target directory protection"
+        UNFORGE_PROTECT=1
+      fi
     else
       UNFORGE_PROTECT=0
     fi
@@ -604,7 +618,7 @@ cmd_add() {
   # When inside a git repo, if branch is main, resolve it to its current
   # reference.
   if [ -n "$UNFORGE_INDEX" ]; then
-    if printf %s\\n "$UNFORGE_INDEX" | grep -Fq "$GITROOT"; then
+    if index_in_git; then
       if printf %s\\n "$UNFORGE_GIT_RESOLVE" | grep -Fq "$REPO_REF"; then
         debug "Resolving $REPO_REF branch at $UNFORGE_TYPE"
         ref=$(resolve_${UNFORGE_TYPE}_branch "$REPO_REF")
@@ -640,8 +654,8 @@ cmd_add() {
 
   # Extract the tarball to a temporary directory
   tardir=$(mktemp -d)
-  mkdir -p "$tardir"
-  tar -xzf "${dwdir}/${REPO_NAME}.tar.gz" --strip-component 1 -C "$tardir"
+  chmod "=rwx" "$tardir";  # Reset permissions according to umask
+  tar -xzof "${dwdir}/${REPO_NAME}.tar.gz" --strip-component 1 -C "$tardir"
   trace "Extracted ${dwdir}/${REPO_NAME}.tar.gz to $tardir"
 
   # Decide source directory (inside unpacked tar)
@@ -669,7 +683,7 @@ cmd_add() {
     fi
   fi
   mkdir -p "${DESTDIR}"
-  tar -C "$SRCDIR" -cf - . | tar -C "${DESTDIR}" -xf -
+  tar -C "$SRCDIR" -cf - . | tar -C "${DESTDIR}" -xof -
   if [ -n "${2:-}" ]; then
     verbose "Copied snapshot of ${REPO_URL}@${REPO_REF}/${2#/} to ${DESTDIR}"
   else
