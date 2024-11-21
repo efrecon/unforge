@@ -190,7 +190,7 @@ implementation script. For an exact list of inputs, consult the
 + When running against GitHub repositories, you can specify fully qualified
   references, e.g. starting with `refs/` to bypass the default search order.
 + When `-f`is provided, wipes the content of the target directory, unless the
-  `unforge_KEEP` variable is set to `1`. Since `unforge` is about obtaining
+  `UNFORGE_KEEP` variable is set to `1`. Since `unforge` is about obtaining
   snapshots of target repositories, the (good) default prevents mixing several
   snapshots into the same target directory.
 + `-p` can prevent the target directory to be modified by forcing all files and
@@ -198,10 +198,11 @@ implementation script. For an exact list of inputs, consult the
   snapshots.
 + Can maintain an index of (relative) directories containing snapshots of added
   repositories. When using an index, target directory protection is
-  automatically turned on.
+  automatically turned on, but only when the index is not under a git
+  repository. This is because `git` does not play well with read-only files.
 + When run from within a `git` repository, will automatically use a file called
-  `.unforge` at the root of the repository as an index when adding the first time
-  -- and unless specified otherwise.
+  `.unforge` at the root of the repository as an index when adding the first
+  time -- and unless specified otherwise.
 + When run from within a `git` repository, the `main` and `master` branches will
   be resolved to their current reference in the `.unforge` index. This freezes
   the imported code at the current moment in time and avoids problems when
@@ -225,14 +226,15 @@ implementation script. For an exact list of inputs, consult the
 
 + If the target repository contains [submodules], the content of these
   submodules will not be part of the downloaded tarball, nor the directory
-  snapshot.
+  snapshot. There might be settings at the forge to include submodules, on a per
+  project basis.
 
 ## Why?
 
 There are a number of scenarios where this can be useful:
 
 + When you want to have a quick look at the content of a project from the
-  comfort of your favorite editor.
+  comfort of your favourite editor.
 + When you want to use neither [submodules], nor [subtree], but still want to
   use (and maintain over time) another project's tree within yours.
 + `unforge` implements a rudimentary package manager.
