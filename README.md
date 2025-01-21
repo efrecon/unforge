@@ -71,11 +71,28 @@ deleting.
 
 The following command will download the latest content of this repository
 (`main` branch) into a directory called `unforge` under the current directory.
-It will update the index file called `.unforge` in the current directory to
-remember this association.
+It will *update* the index file called `.unforge` in the current directory to
+remember this association through pinpointing the current commit reference that
+corresponds to the `main` branch.
 
 ```bash
 unforge.sh -i .unforge add efrecon/unforge
+```
+
+Resolving the branch leads to deterministic results: it freezes the content of
+your dependency to a known good version (and implementation). If you are willing
+to accept changes across the development lifecycle, you could instead run the
+following command.
+
+```bash
+unforge.sh -r '' -i .unforge add efrecon/unforge
+```
+
+Whenever you are willing to accept changes at the `main` branch of the software
+sources, you would run the following command.
+
+```bash
+unforge.sh -r '' -i .unforge -ff install
 ```
 
 #### Install Several Snapshots
