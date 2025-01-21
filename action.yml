@@ -29,6 +29,9 @@ inputs:
   path:
     description: 'Relative path under $GITHUB_WORKSPACE to place the repository'
     required: false
+  subdirectory:
+    description: 'Subdirectory to extract from the remote repository'
+    required: false
 runs:
   using: composite
   steps:
@@ -43,6 +46,7 @@ runs:
         UNFORGE__REF: ${{ inputs.ref }}
         UNFORGE__REPOSITORY: ${{ inputs.repository }}
         UNFORGE__PATH: ${{ inputs.path }}
+        UNFORGE__SUBDIR: ${{ inputs.subdirectory }}
       run: |
         set -eu;  # Exit on error or undefined variable
 
@@ -70,4 +74,4 @@ runs:
           -f \
           -i '-' \
           -vv \
-          add "$repo" "$target"
+          add "$repo" "$target" "$UNFORGE__SUBDIR"
