@@ -10,13 +10,17 @@ inputs similar to [actions/checkout], but without the history.
 `unforge` can detect that the destination directory belongs to a git repository.
 In that case it will maintain an index of such snapshots in a file called
 `.unforge` at the root of the repository, preferably. `unforge` automatically
-caches tarballs in the [XDG] cache to avoid unnecessary downloads.
+caches tarballs in the [XDG] cache to avoid unnecessary downloads. In many
+aspects, `unforge` can be a lightweight alternative to git [submodules] or the
+contributed, abandonware [subtree].
 
 Read further down for a more detailed list of `unforge`'s
 [features](#highlights) and [limitations](#limitations), or jump straight to the
 [examples](#examples).
 
   [actions/checkout]: https://github.com/actions/checkout
+  [submodules]: https://git-scm.com/book/en/v2/Git-Tools-Submodules
+  [subtree]: https://git.kernel.org/pub/scm/git/git.git/plain/contrib/subtree/git-subtree.txt
 
 ## Examples
 
@@ -79,6 +83,8 @@ corresponds to the `main` branch.
 unforge.sh -i .unforge add efrecon/unforge
 ```
 
+#### Unresolved Snapshots
+
 Resolving the branch leads to deterministic results: it freezes the content of
 your dependency to a known good version (and implementation). If you are willing
 to accept changes across the development lifecycle, you could instead run the
@@ -88,11 +94,12 @@ following command.
 unforge.sh -r '' -i .unforge add efrecon/unforge
 ```
 
-Whenever you are willing to accept changes at the `main` branch of the software
-sources, you would run the following command.
+Whenever you are willing to accept changes at the `main` branch of the project,
+and now that it is available at the `unforge` sub-directory, you would run the
+following command.
 
 ```bash
-unforge.sh -r '' -i .unforge -ff install
+unforge.sh -r '' -i .unforge update unforge
 ```
 
 #### Install Several Snapshots
@@ -107,15 +114,22 @@ actions/keepalive https://github.com/efrecon/gh-action-keepalive
 ```
 
 Then, when the following command is run, it will add the `unforge` and
-`actions/keepalive` directories under the current directory. `unforge` will
-automatically climb up the hierarchy in search for the `.unforge` index file
-that you have created. Since an index file is found and used, files and
-directories will be made read-only. This is to enforce managing the snapshots
-using `unforge`, and to prevent their heedless modification.
+`actions/keepalive` directories under the current directory.
 
 ```bash
 unforge.sh install
 ```
+
+`unforge` will automatically climb up the hierarchy in search for the `.unforge`
+index file that you have created. Since an index file is found and used, files
+and directories will be made read-only. This is to enforce managing the
+snapshots using `unforge`, and to prevent their heedless modification. Also,
+since both project specifications didn't specify a branch, both `main` or
+`master` are implied and `unforge` will automatically resolve the first matching
+(default) branch to the current commit reference. The index file will be
+modified to contain resolved URLs with that reference. Use the `-r` option as
+described [above](#unresolved-snapshots) to keep unresolved URLs in the index
+instead.
 
 #### Remove a Snapshot
 
@@ -178,7 +192,11 @@ options:
 + `delete` (or `remove`): Remove the directory passed as an argument. When an
   index file is to be maintained, the association will be lost.
 + `install`: Install snapshots of all repositories pointed out by the index
-  file, if not already present.
+  file, if not already present. When given arguments, only the projects which
+  names are provided in the arguments and found in the index will be installed.
++ `update`: Update all or some of the projects pointed at by the index file.
+  `update` is an alias for `install` with the `-ff` option, i.e. it will renew
+  the cache and reinstall the project from its downloaded tarfile.
 + `help`: Print the same help as with the `-h` option and exit.
 
 This script has minimal dependencies. It has been tested under `bash` and `ash`
@@ -224,7 +242,8 @@ implementation script. For an exact list of inputs, consult the
   be resolved to their current reference in the `.unforge` index. This freezes
   the imported code at the current moment in time and avoids problems when
   updating later. The list of branches to resolve can be changed through the
-  option `-r`. 
+  option `-r`, and setting that option to an empty string will turn off that
+  behavior.
 + Automatically detects the default branch of github and gitlab projects.
 + `unforge` will automatically climb up the hierarchy starting from the
   destination directory to look for the `.unforge` index file when adding,
@@ -256,9 +275,6 @@ There are a number of scenarios where this can be useful:
   use (and maintain over time) another project's tree within yours.
 + `unforge` implements a rudimentary package manager.
 + It was fun to write and only took a few hours.
-
-  [submodules]: https://git-scm.com/book/en/v2/Git-Tools-Submodules
-  [subtree]: https://git.kernel.org/pub/scm/git/git.git/plain/contrib/subtree/git-subtree.txt
 
 ## Speed
 
