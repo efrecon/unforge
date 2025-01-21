@@ -199,11 +199,11 @@ default_github_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
     # Add api. in front of the domain name and /repos/ in the path
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].]+)/~https://api.\1/repos/~')
-    curl -sSL "${DW_ROOT%/}/branches" --header "Authorization: Bearer $UNFORGE_TOKEN" |
+    download "${DW_ROOT%/}/branches" "-" --header "Authorization: Bearer $UNFORGE_TOKEN" |
       json_string_value "name" |
       head -n 1
   else
-    curl -sSL "${REPO_URL%/}/branches" |
+    download "${REPO_URL%/}/branches" "-" |
       json_string_value "name" |
       head -n 1
   fi
@@ -214,12 +214,12 @@ resolve_github_branch() {
   if [ -n "$UNFORGE_TOKEN" ]; then
     # Add api. in front of the domain name and /repos/ in the path
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].]+)/~https://api.\1/repos/~')
-    curl -sSL "${DW_ROOT%/}/commits?sha=${REPO_REF}" --header "Authorization: Bearer $UNFORGE_TOKEN" |
+    download "${DW_ROOT%/}/commits?sha=${REPO_REF}" "-" --header "Authorization: Bearer $UNFORGE_TOKEN" |
       grep -sEo 'commits/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
       head -n 1
   else
-    curl -sSL "${REPO_URL%/}/commits/${REPO_REF}/" |
+    download "${REPO_URL%/}/commits/${REPO_REF}/" "-" |
       grep -sEo 'commit/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
       head -n 1
@@ -260,11 +260,11 @@ default_gitlab_branch() {
     # Extract the repository name from the URL and the root of the domain.
     _repo=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~\2~')
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~https://\1/~')
-    curl -sSL "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")" --header "Authorization: Bearer $UNFORGE_TOKEN" |
+    download "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")" "-" --header "Authorization: Bearer $UNFORGE_TOKEN" |
       json_string_value "default_branch" |
       head -n 1
   else
-    curl -sSL "${REPO_URL%/}/-/branches" |
+    download "${REPO_URL%/}/-/branches" "-" |
       grep -Eo 'default-branch-name\s*=\s*"[^"]+"' |
       quoted_string_eol |
       unquote |
@@ -278,12 +278,12 @@ resolve_gitlab_branch() {
     # Extract the repository name from the URL and the root of the domain.
     _repo=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~\2~')
     DW_ROOT=$(printf %s\\n "$REPO_URL" | sed -E 's~https://([[:alnum:].:]+)/(.*)~https://\1/~')
-    curl -sSL "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")/repository/commits?ref_name=${REPO_REF}" --header "PRIVATE-TOKEN: $UNFORGE_TOKEN" |
+    download "${DW_ROOT%/}/api/v4/projects/$(urlencode "$_repo")/repository/commits?ref_name=${REPO_REF}" "-" --header "PRIVATE-TOKEN: $UNFORGE_TOKEN" |
       grep -sEo 'commit/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
       head -n 1
   else
-    curl -sSL "${REPO_URL%/}/-/commits/${REPO_REF}/" |
+    download "${REPO_URL%/}/-/commits/${REPO_REF}/" "-" |
       grep -sEo 'tree/[0-9a-f]{40}' |
       grep -sEo '[0-9a-f]{40}' |
       head -n 1
@@ -366,7 +366,6 @@ relpath() {
 }
 
 index_in_git() {
-  verbose "$UNFORGE_INDEX --  $GITROOT"
   if [ -n "${UNFORGE_INDEX:-}" ] && [ -n "${GITROOT:-}" ]; then
     printf %s\\n "$UNFORGE_INDEX" | grep -Fq "$GITROOT"
   else
@@ -490,6 +489,25 @@ forge_url() {
 }
 
 
+should_add() {
+  DESTDIR=$1
+  shift
+  if [ "$#" -eq 0 ]; then
+    # No destination directories specified, add all
+    return 0
+  else
+    # Check if the destination directory is in the list of specified ones
+    for d in "$@"; do
+      if [ "$DESTDIR" = "$d" ]; then
+        return 0
+      fi
+    done
+  fi
+
+  return 1
+}
+
+
 cmd_install() {
   # Detect the git repository root and the index file
   index_detect "$(pwd)"
@@ -521,18 +539,20 @@ EOF
         REPO_URL=$(printf %s\\n "$line" | awk '{print $2}')
         SUBDIR=$(printf %s\\n "$line" | awk '{print $3}')
         if [ -n "$REPO_URL" ] && [ -n "$DESTDIR" ]; then
-          # Compute the full path of the destination directory and call this
-          # script again to add the snapshot. Do not replace existing
-          # directories unless forced.
-          DESTDIR=${INDEX_DIR}/${DESTDIR}
-          if [ -d "$DESTDIR" ]; then
-            if [ "$UNFORGE_FORCE" -ge 1 ]; then
-              "$0" add "$REPO_URL" "$DESTDIR" "$SUBDIR"
+          if should_add "$DESTDIR" "$@"; then
+            # Compute the full path of the destination directory and call this
+            # script again to add the snapshot. Do not replace existing
+            # directories unless forced.
+            DESTDIR=${INDEX_DIR}/${DESTDIR}
+            if [ -d "$DESTDIR" ]; then
+              if [ "$UNFORGE_FORCE" -ge 1 ]; then
+                "$0" add "$REPO_URL" "$DESTDIR" "$SUBDIR"
+              else
+                verbose "Skipping $DESTDIR, already exists. Rerun with at least -f to force"
+              fi
             else
-              verbose "Skipping $DESTDIR, already exists. Rerun with at least -f to force"
+              "$0" add "$REPO_URL" "$DESTDIR" "$SUBDIR"
             fi
-          else
-            "$0" add "$REPO_URL" "$DESTDIR" "$SUBDIR"
           fi
         fi
       fi
@@ -734,9 +754,16 @@ else
     help)
       shift; usage;;
     install)
-      shift; cmd_install;;
+      shift; cmd_install "$@";;
     add)
       shift; cmd_add "$@";;
+    update)
+      # Update is an alias for force installation (of specific projects)
+      shift
+      UNFORGE_FORCE=2
+      export UNFORGE_FORCE
+      cmd_install "$@"
+      ;;
     remove)
       shift; cmd_delete "$@";;
     delete)
